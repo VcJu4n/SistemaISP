@@ -1,94 +1,34 @@
-# Sistema ISP
+# SistemaISP
 
-Sistema web para la administración de Proveedores de Internet (ISP) con integración a MikroTik.
-
----
+Sistema web para la administración de un proveedor de Internet (ISP), con integración futura a MikroTik.
 
 ## Tecnologías
 
 ### Frontend
 
-- React
-- TypeScript
-- Vite
-- Tailwind CSS
-- React Router DOM
-- Axios
-- TanStack Query
-- React Hook Form
-- Zod
-- Lucide React
+- React 19 y TypeScript
+- Vite y Tailwind CSS
+- React Router, Axios y TanStack Query
+- React Hook Form y Zod
 
 ### Backend
 
-- Node.js
-- Express
-- TypeScript
+- Laravel 12 y PHP 8.3+
+- Laravel Sanctum
+- Eloquent ORM
 - PostgreSQL
-- Prisma ORM
-- JWT
-- bcrypt
-- dotenv
-- CORS
 
----
-
-## Herramientas
-
-- Git
-- GitHub
-- Visual Studio Code
-- PostgreSQL
-- pgAdmin
-- Postman
-- Figma
-
----
+El backend contempla actualmente un único administrador. No incluye facturación, tickets, roles ni auditoría.
 
 ## Arquitectura
 
-```
-Frontend (React)
-
-↓
-
-API REST (Express)
-
-↓
-
-Prisma ORM
-
-↓
-
-PostgreSQL
-
-↓
-
-MikroTik RouterOS API
+```text
+React -> API REST Laravel -> Eloquent -> PostgreSQL
+                              |
+                              -> MikroTik RouterOS API (futuro)
 ```
 
----
-
-## Estructura del proyecto
-
-```
-SistemaISP/
-
-├── frontend/
-├── backend/
-├── README.md
-└── .gitignore
-```
-
----
-
-## Instalación
-
-### Clonar repositorio
-
-```bash
-git clone https://github.com/usuario/SistemaISP.git
-```
+## Inicio rápido
 
 ### Frontend
 
@@ -100,8 +40,4 @@ npm run dev
 
 ### Backend
 
-```bash
-cd backend
-npm install
-npm run dev
-```
+Consulta las instrucciones y endpoints en [`backend/README.md`](backend/README.md).
