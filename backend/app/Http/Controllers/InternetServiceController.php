@@ -8,6 +8,7 @@ use App\Http\Requests\SuspendServiceRequest;
 use App\Models\Client;
 use App\Models\InternetService;
 use App\Models\Plan;
+use App\Services\MikrotikOperationRecorder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,6 +17,8 @@ use Illuminate\Validation\ValidationException;
 
 class InternetServiceController extends Controller
 {
+    public function __construct(private readonly MikrotikOperationRecorder $mikrotikOperations) {}
+
     public function index(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -60,6 +63,8 @@ class InternetServiceController extends Controller
 
         $this->validatePlanForClient($plan, $client);
 
+        $data['mikrotik_control_method'] ??= 'manual';
+
         $service = DB::transaction(function () use ($data, $client, $plan): InternetService {
             $service = InternetService::query()->create([...$data, 'status' => 'active']);
             $service->histories()->create([
@@ -68,6 +73,7 @@ class InternetServiceController extends Controller
                 'metadata' => ['plan_id' => $plan->id, 'plan_name' => $plan->name],
                 'occurred_at' => now(),
             ]);
+            $this->mikrotikOperations->createAccess($service);
             return $service;
         });
 
@@ -96,6 +102,11 @@ class InternetServiceController extends Controller
                 'metadata' => ['reason' => $data['reason'], 'reason_label' => $labels[$data['reason']], 'notes' => $data['notes'] ?? null],
                 'occurred_at' => now(),
             ]);
+            $this->mikrotikOperations->suspend($service, [
+                'reason' => $data['reason'],
+                'reason_label' => $labels[$data['reason']],
+                'notes' => $data['notes'] ?? null,
+            ]);
         });
 
         return response()->json(['message' => 'Servicio suspendido correctamente.', 'data' => $this->loadService($service)]);
@@ -110,6 +121,7 @@ class InternetServiceController extends Controller
         DB::transaction(function () use ($service): void {
             $service->update(['status' => 'active', 'suspended_at' => null, 'suspension_reason' => null, 'suspension_notes' => null]);
             $service->histories()->create(['event_type' => 'reactivated', 'description' => 'Servicio reactivado.', 'occurred_at' => now()]);
+            $this->mikrotikOperations->reactivate($service);
         });
 
         return response()->json(['message' => 'Servicio reactivado correctamente.', 'data' => $this->loadService($service)]);
@@ -129,12 +141,14 @@ class InternetServiceController extends Controller
 
         DB::transaction(function () use ($service, $plan, $previousPlan): void {
             $service->update(['plan_id' => $plan->id]);
+            $service->setRelation('plan', $plan);
             $service->histories()->create([
                 'event_type' => 'plan_changed',
                 'description' => "Plan cambiado de {$previousPlan->name} a {$plan->name}.",
                 'metadata' => ['previous_plan_id' => $previousPlan->id, 'previous_plan_name' => $previousPlan->name, 'new_plan_id' => $plan->id, 'new_plan_name' => $plan->name],
                 'occurred_at' => now(),
             ]);
+            $this->mikrotikOperations->changePlan($service, $previousPlan, $plan);
         });
 
         return response()->json(['message' => 'Plan cambiado correctamente.', 'data' => $this->loadService($service)]);
@@ -154,6 +168,7 @@ class InternetServiceController extends Controller
     {
         $relations = ['client.zone:id,name', 'plan:id,name,download_mbps,upload_mbps,monthly_price,active'];
         if ($withHistory) $relations[] = 'histories';
+        if ($withHistory) $relations[] = 'mikrotikOperations';
         return $service->fresh()->load($relations);
     }
 }

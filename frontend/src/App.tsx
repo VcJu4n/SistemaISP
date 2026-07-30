@@ -6,6 +6,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { LoginPage } from './pages/LoginPage'
 import { ClientsPage } from './pages/ClientsPage'
 import { CatalogsPage } from './pages/CatalogsPage'
+import { MikrotikRoutersPage } from './pages/MikrotikRoutersPage'
 import { ServicesPage } from './pages/ServicesPage'
 import { useAuth } from './auth/useAuth'
 
@@ -24,6 +25,7 @@ function App() {
           <Route path="/clientes" element={<ClientsPage />} />
           <Route path="/catalogos" element={<CatalogsPage />} />
           <Route path="/servicios" element={<ServicesPage />} />
+          <Route path="/mikrotik" element={<MikrotikRoutersPage />} />
         </Route>
         <Route path="/cambiar-contrasena" element={<ChangePasswordPage />} />
       </Route>
