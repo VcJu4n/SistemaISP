@@ -20,6 +20,7 @@ class InternetServiceFactory extends Factory
             'status' => 'active',
             'installation_date' => fake()->date(),
             'notes' => fake()->optional()->sentence(),
+            'mikrotik_control_method' => 'manual',
         ];
     }
 }

@@ -13,14 +13,14 @@ export function DashboardPage() {
       </div>
 
       <div className="stats-grid">
-        <article className="stat-card"><Users /><div><strong>Clientes</strong><span>Módulo disponible</span></div></article>
-        <article className="stat-card"><Router /><div><strong>Routers</strong><span>Próximo módulo</span></div></article>
-        <article className="stat-card"><Wifi /><div><strong>Servicios</strong><span>Módulo disponible</span></div></article>
+        <article className="stat-card"><Users /><div><strong>Clientes</strong><span>Modulo disponible</span></div></article>
+        <article className="stat-card"><Router /><div><strong>Routers</strong><span>Modulo disponible</span></div></article>
+        <article className="stat-card"><Wifi /><div><strong>Servicios</strong><span>Modulo disponible</span></div></article>
       </div>
 
       <section className="empty-state">
         <Users size={34} />
-        <h2>Gestión de clientes disponible</h2>
+        <h2>Gestion de clientes disponible</h2>
         <p>Ya puedes registrar, buscar, editar y archivar clientes.</p>
       </section>
     </section>

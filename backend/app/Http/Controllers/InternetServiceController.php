@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ChangeServicePlanRequest;
 use App\Http\Requests\StoreInternetServiceRequest;
 use App\Http\Requests\SuspendServiceRequest;
+use App\Http\Requests\UpdateServiceTechnicalConfigRequest;
 use App\Models\Client;
 use App\Models\InternetService;
 use App\Models\Plan;
+use App\Services\MikrotikOperationRecorder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,6 +18,8 @@ use Illuminate\Validation\ValidationException;
 
 class InternetServiceController extends Controller
 {
+    public function __construct(private readonly MikrotikOperationRecorder $mikrotikOperations) {}
+
     public function index(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -60,6 +64,8 @@ class InternetServiceController extends Controller
 
         $this->validatePlanForClient($plan, $client);
 
+        $data = StoreInternetServiceRequest::normalizeTechnicalConfig($data);
+
         $service = DB::transaction(function () use ($data, $client, $plan): InternetService {
             $service = InternetService::query()->create([...$data, 'status' => 'active']);
             $service->histories()->create([
@@ -68,6 +74,7 @@ class InternetServiceController extends Controller
                 'metadata' => ['plan_id' => $plan->id, 'plan_name' => $plan->name],
                 'occurred_at' => now(),
             ]);
+            $this->mikrotikOperations->createAccess($service);
             return $service;
         });
 
@@ -96,6 +103,11 @@ class InternetServiceController extends Controller
                 'metadata' => ['reason' => $data['reason'], 'reason_label' => $labels[$data['reason']], 'notes' => $data['notes'] ?? null],
                 'occurred_at' => now(),
             ]);
+            $this->mikrotikOperations->suspend($service, [
+                'reason' => $data['reason'],
+                'reason_label' => $labels[$data['reason']],
+                'notes' => $data['notes'] ?? null,
+            ]);
         });
 
         return response()->json(['message' => 'Servicio suspendido correctamente.', 'data' => $this->loadService($service)]);
@@ -110,6 +122,7 @@ class InternetServiceController extends Controller
         DB::transaction(function () use ($service): void {
             $service->update(['status' => 'active', 'suspended_at' => null, 'suspension_reason' => null, 'suspension_notes' => null]);
             $service->histories()->create(['event_type' => 'reactivated', 'description' => 'Servicio reactivado.', 'occurred_at' => now()]);
+            $this->mikrotikOperations->reactivate($service);
         });
 
         return response()->json(['message' => 'Servicio reactivado correctamente.', 'data' => $this->loadService($service)]);
@@ -117,7 +130,8 @@ class InternetServiceController extends Controller
 
     public function changePlan(ChangeServicePlanRequest $request, InternetService $service): JsonResponse
     {
-        $plan = Plan::query()->with('zones:id')->findOrFail($request->integer('plan_id'));
+        $data = $request->validated();
+        $plan = Plan::query()->with('zones:id')->findOrFail($data['plan_id']);
         $service->load('client');
 
         if ($plan->id === $service->plan_id) {
@@ -127,17 +141,62 @@ class InternetServiceController extends Controller
         $this->validatePlanForClient($plan, $service->client);
         $previousPlan = $service->plan;
 
-        DB::transaction(function () use ($service, $plan, $previousPlan): void {
-            $service->update(['plan_id' => $plan->id]);
+        DB::transaction(function () use ($service, $plan, $previousPlan, $data): void {
+            $changes = ['plan_id' => $plan->id];
+
+            if ($service->mikrotik_control_method === 'pppoe') {
+                $changes['pppoe_profile'] = $data['pppoe_profile'];
+            }
+
+            $service->update($changes);
+            $service->setRelation('plan', $plan);
             $service->histories()->create([
                 'event_type' => 'plan_changed',
                 'description' => "Plan cambiado de {$previousPlan->name} a {$plan->name}.",
-                'metadata' => ['previous_plan_id' => $previousPlan->id, 'previous_plan_name' => $previousPlan->name, 'new_plan_id' => $plan->id, 'new_plan_name' => $plan->name],
+                'metadata' => [
+                    'previous_plan_id' => $previousPlan->id,
+                    'previous_plan_name' => $previousPlan->name,
+                    'new_plan_id' => $plan->id,
+                    'new_plan_name' => $plan->name,
+                    'pppoe_profile' => $changes['pppoe_profile'] ?? null,
+                ],
                 'occurred_at' => now(),
             ]);
+            $this->mikrotikOperations->changePlan($service, $previousPlan, $plan);
         });
 
         return response()->json(['message' => 'Plan cambiado correctamente.', 'data' => $this->loadService($service)]);
+    }
+
+    public function updateTechnicalConfig(UpdateServiceTechnicalConfigRequest $request, InternetService $service): JsonResponse
+    {
+        $data = UpdateServiceTechnicalConfigRequest::normalizeTechnicalConfig($request->validated());
+
+        if (($data['mikrotik_control_method'] ?? null) === 'pppoe' && (! array_key_exists('pppoe_password', $data) || $data['pppoe_password'] === null)) {
+            unset($data['pppoe_password']);
+        }
+
+        $before = $service->only($this->technicalConfigFields());
+        $syncFieldsChanged = $this->technicalSyncFieldsChanged($service, $data);
+
+        DB::transaction(function () use ($service, $data, $before, $syncFieldsChanged): void {
+            $service->update($data);
+            $service->histories()->create([
+                'event_type' => 'technical_config_updated',
+                'description' => 'Configuracion tecnica MikroTik actualizada.',
+                'metadata' => [
+                    'before' => $before,
+                    'after' => $service->fresh()->only($this->technicalConfigFields()),
+                ],
+                'occurred_at' => now(),
+            ]);
+
+            if ($syncFieldsChanged && $service->fresh()->requiresMikrotikSync()) {
+                $this->mikrotikOperations->createAccess($service->fresh());
+            }
+        });
+
+        return response()->json(['message' => 'Configuracion tecnica actualizada correctamente.', 'data' => $this->loadService($service)]);
     }
 
     private function validatePlanForClient(Plan $plan, Client $client): void
@@ -152,8 +211,48 @@ class InternetServiceController extends Controller
 
     private function loadService(InternetService $service, bool $withHistory = false): InternetService
     {
-        $relations = ['client.zone:id,name', 'plan:id,name,download_mbps,upload_mbps,monthly_price,active'];
+        $relations = [
+            'client.zone:id,name',
+            'plan:id,name,download_mbps,upload_mbps,monthly_price,active',
+            'mikrotikRouter:id,name,connection_status,active',
+        ];
         if ($withHistory) $relations[] = 'histories';
+        if ($withHistory) $relations[] = 'mikrotikOperations.router:id,name,connection_status,active';
         return $service->fresh()->load($relations);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function technicalConfigFields(): array
+    {
+        return [
+            'mikrotik_router_id',
+            'mikrotik_control_method',
+            'pppoe_username',
+            'pppoe_profile',
+            'simple_queue_name',
+            'service_ip_address',
+            'service_mac_address',
+            'client_antenna_ip',
+            'client_antenna_mac',
+            'client_antenna_brand_model',
+            'client_antenna_device_name',
+            'technical_notes',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function technicalSyncFieldsChanged(InternetService $service, array $data): bool
+    {
+        foreach (['mikrotik_router_id', 'mikrotik_control_method', 'pppoe_username', 'pppoe_password', 'pppoe_profile', 'simple_queue_name', 'service_ip_address', 'service_mac_address'] as $field) {
+            if (array_key_exists($field, $data) && $service->{$field} !== $data[$field]) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
