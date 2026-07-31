@@ -158,6 +158,11 @@ class InternetServiceController extends Controller
     public function updateTechnicalConfig(UpdateServiceTechnicalConfigRequest $request, InternetService $service): JsonResponse
     {
         $data = UpdateServiceTechnicalConfigRequest::normalizeTechnicalConfig($request->validated());
+
+        if (($data['mikrotik_control_method'] ?? null) === 'pppoe' && (! array_key_exists('pppoe_password', $data) || $data['pppoe_password'] === null)) {
+            unset($data['pppoe_password']);
+        }
+
         $before = $service->only($this->technicalConfigFields());
         $syncFieldsChanged = $this->technicalSyncFieldsChanged($service, $data);
 
@@ -229,7 +234,7 @@ class InternetServiceController extends Controller
      */
     private function technicalSyncFieldsChanged(InternetService $service, array $data): bool
     {
-        foreach (['mikrotik_router_id', 'mikrotik_control_method', 'pppoe_username', 'pppoe_profile', 'simple_queue_name', 'service_ip_address', 'service_mac_address'] as $field) {
+        foreach (['mikrotik_router_id', 'mikrotik_control_method', 'pppoe_username', 'pppoe_password', 'pppoe_profile', 'simple_queue_name', 'service_ip_address', 'service_mac_address'] as $field) {
             if (array_key_exists($field, $data) && $service->{$field} !== $data[$field]) {
                 return true;
             }

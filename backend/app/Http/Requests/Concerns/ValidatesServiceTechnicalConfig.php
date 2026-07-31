@@ -14,6 +14,8 @@ trait ValidatesServiceTechnicalConfig
         $methodRule = $methodRequired ? ['required'] : ['nullable'];
         $controlMethod = $this->input('mikrotik_control_method', 'manual');
         $requiresRouter = in_array($controlMethod, ['pppoe', 'simple_queue'], true);
+        $service = $this->route('service');
+        $requiresPppoePassword = $controlMethod === 'pppoe' && (! $service || $service->pppoe_password === null);
 
         return [
             'mikrotik_router_id' => [
@@ -29,6 +31,13 @@ trait ValidatesServiceTechnicalConfig
                 'string',
                 'max:100',
                 Rule::unique('internet_services', 'pppoe_username')->ignore($serviceId),
+            ],
+            'pppoe_password' => [
+                'exclude_unless:mikrotik_control_method,pppoe',
+                Rule::requiredIf($requiresPppoePassword),
+                'nullable',
+                'string',
+                'max:255',
             ],
             'pppoe_profile' => ['exclude_unless:mikrotik_control_method,pppoe', 'required', 'string', 'max:100'],
             'simple_queue_name' => [
@@ -75,6 +84,7 @@ trait ValidatesServiceTechnicalConfig
             'mikrotik_router_id.exists' => 'El router MikroTik seleccionado no existe o esta inactivo.',
             'pppoe_username.required' => 'El usuario PPPoE es obligatorio para servicios PPPoE.',
             'pppoe_username.unique' => 'Este usuario PPPoE ya esta asociado a otro servicio.',
+            'pppoe_password.required' => 'La contrasena PPPoE es obligatoria para crear el acceso PPPoE.',
             'pppoe_profile.required' => 'El perfil PPPoE es obligatorio para servicios PPPoE.',
             'simple_queue_name.required' => 'El nombre de cola es obligatorio para Simple Queue.',
             'simple_queue_name.unique' => 'Este nombre de cola ya esta asociado a otro servicio.',
@@ -98,6 +108,7 @@ trait ValidatesServiceTechnicalConfig
             'mikrotik_router_id',
             'mikrotik_control_method',
             'pppoe_username',
+            'pppoe_password',
             'pppoe_profile',
             'simple_queue_name',
             'service_ip_address',
@@ -121,6 +132,7 @@ trait ValidatesServiceTechnicalConfig
         if ($method === 'manual') {
             $data['mikrotik_router_id'] = null;
             $data['pppoe_username'] = null;
+            $data['pppoe_password'] = null;
             $data['pppoe_profile'] = null;
             $data['simple_queue_name'] = null;
             $data['service_ip_address'] = null;
@@ -133,6 +145,7 @@ trait ValidatesServiceTechnicalConfig
 
         if ($method === 'simple_queue') {
             $data['pppoe_username'] = null;
+            $data['pppoe_password'] = null;
             $data['pppoe_profile'] = null;
         }
 

@@ -15,18 +15,21 @@ class InternetService extends Model
     protected $fillable = [
         'client_id', 'plan_id', 'status', 'installation_date', 'notes',
         'mikrotik_router_id', 'mikrotik_control_method', 'pppoe_username',
-        'pppoe_profile', 'simple_queue_name', 'service_ip_address',
+        'pppoe_password', 'pppoe_profile', 'simple_queue_name', 'service_ip_address',
         'service_mac_address', 'client_antenna_ip', 'client_antenna_mac',
         'client_antenna_brand_model', 'client_antenna_device_name',
         'technical_notes',
         'suspended_at', 'suspension_reason', 'suspension_notes',
     ];
 
+    protected $hidden = ['pppoe_password'];
+
     protected function casts(): array
     {
         return [
             'installation_date' => 'date:Y-m-d',
             'suspended_at' => 'datetime',
+            'pppoe_password' => 'encrypted',
         ];
     }
 
@@ -47,6 +50,7 @@ class InternetService extends Model
             'control_method' => $this->mikrotik_control_method,
             'pppoe' => [
                 'username' => $this->pppoe_username,
+                'password_configured' => $this->pppoe_password !== null,
                 'profile' => $this->pppoe_profile,
             ],
             'simple_queue' => [

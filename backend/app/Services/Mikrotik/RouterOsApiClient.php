@@ -14,23 +14,45 @@ class RouterOsApiClient
 
     public function testConnection(MikrotikRouter $router): void
     {
+        $this->withAuthenticatedConnection($router, fn () => null);
+    }
+
+    /**
+     * @param  list<string>  $words
+     */
+    public function executeCommand(MikrotikRouter $router, array $words): void
+    {
+        $this->withAuthenticatedConnection($router, function () use ($words): void {
+            $this->writeSentence($words);
+            $reply = $this->readReply();
+
+            if ($reply['done'] !== true) {
+                throw new RuntimeException($reply['error'] ?? 'RouterOS rechazo el comando.');
+            }
+        });
+    }
+
+    private function withAuthenticatedConnection(MikrotikRouter $router, callable $callback): void
+    {
         $this->connect($router);
 
         try {
             $this->loginPlain($router->username, $router->password);
-            return;
         } catch (RuntimeException $exception) {
             $plainLoginError = $exception;
-        } finally {
             $this->disconnect();
+
+            $this->connect($router);
+
+            try {
+                $this->loginLegacy($router->username, $router->password);
+            } catch (RuntimeException) {
+                throw $plainLoginError;
+            }
         }
 
-        $this->connect($router);
-
         try {
-            $this->loginLegacy($router->username, $router->password);
-        } catch (RuntimeException) {
-            throw $plainLoginError;
+            $callback();
         } finally {
             $this->disconnect();
         }

@@ -3,8 +3,12 @@
 namespace Tests\Feature;
 
 use App\Contracts\MikrotikOperationExecutor;
+use App\Models\InternetService;
 use App\Models\MikrotikOperation;
+use App\Models\MikrotikRouter;
 use App\Services\Mikrotik\MikrotikOperationProcessor;
+use App\Services\Mikrotik\RouterOsApiClient;
+use App\Services\Mikrotik\RouterOsMikrotikOperationExecutor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use RuntimeException;
 use Tests\TestCase;
@@ -88,6 +92,64 @@ class MikrotikOperationProcessingTest extends TestCase
         $this->assertSame(1, MikrotikOperation::query()->where('status', MikrotikOperation::STATUS_SYNCED)->count());
         $this->assertSame(1, MikrotikOperation::query()->where('status', MikrotikOperation::STATUS_PENDING)->count());
     }
+
+    public function test_routeros_executor_creates_pppoe_secret_command(): void
+    {
+        $router = MikrotikRouter::factory()->create();
+        $service = InternetService::factory()->create([
+            'mikrotik_router_id' => $router->id,
+            'mikrotik_control_method' => 'pppoe',
+            'pppoe_username' => 'juan.perez',
+            'pppoe_password' => 'cliente-secret',
+            'pppoe_profile' => 'plan-30m',
+        ]);
+        $operation = MikrotikOperation::factory()->create([
+            'internet_service_id' => $service->id,
+            'mikrotik_router_id' => $router->id,
+            'action' => MikrotikOperation::ACTION_CREATE_ACCESS,
+        ]);
+        $client = new RecordingRouterOsApiClient();
+
+        (new RouterOsMikrotikOperationExecutor($client))->execute($operation);
+
+        $this->assertSame($router->id, $client->router?->id);
+        $this->assertSame([
+            '/ppp/secret/add',
+            '=name=juan.perez',
+            '=password=cliente-secret',
+            '=profile=plan-30m',
+            '=disabled=no',
+            "=comment=SistemaISP servicio #{$service->id}",
+        ], $client->command);
+    }
+
+    public function test_routeros_executor_creates_simple_queue_command(): void
+    {
+        $router = MikrotikRouter::factory()->create();
+        $service = InternetService::factory()->create([
+            'mikrotik_router_id' => $router->id,
+            'mikrotik_control_method' => 'simple_queue',
+            'simple_queue_name' => 'cliente-juan',
+            'service_ip_address' => '192.168.10.20',
+        ]);
+        $operation = MikrotikOperation::factory()->create([
+            'internet_service_id' => $service->id,
+            'mikrotik_router_id' => $router->id,
+            'action' => MikrotikOperation::ACTION_CREATE_ACCESS,
+        ]);
+        $client = new RecordingRouterOsApiClient();
+
+        (new RouterOsMikrotikOperationExecutor($client))->execute($operation);
+
+        $this->assertSame([
+            '/queue/simple/add',
+            '=name=cliente-juan',
+            '=target=192.168.10.20/32',
+            "=max-limit={$service->plan->upload_mbps}M/{$service->plan->download_mbps}M",
+            '=disabled=no',
+            "=comment=SistemaISP servicio #{$service->id}",
+        ], $client->command);
+    }
 }
 
 class SuccessfulExecutor implements MikrotikOperationExecutor
@@ -103,5 +165,19 @@ class FailingExecutor implements MikrotikOperationExecutor
     public function execute(MikrotikOperation $operation): void
     {
         throw new RuntimeException('Router disconnected');
+    }
+}
+
+class RecordingRouterOsApiClient extends RouterOsApiClient
+{
+    public ?MikrotikRouter $router = null;
+
+    /** @var list<string> */
+    public array $command = [];
+
+    public function executeCommand(MikrotikRouter $router, array $words): void
+    {
+        $this->router = $router;
+        $this->command = $words;
     }
 }

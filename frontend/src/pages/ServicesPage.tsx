@@ -11,7 +11,7 @@ type ControlMethod = 'manual' | 'pppoe' | 'simple_queue'
 type Service = { id: number; client_id: number; plan_id: number; status: 'active' | 'suspended'; installation_date: string | null; notes: string | null; suspended_at: string | null; suspension_reason: string | null; suspension_notes: string | null; mikrotik_router_id: number | null; mikrotik_control_method: ControlMethod; pppoe_username: string | null; pppoe_profile: string | null; simple_queue_name: string | null; service_ip_address: string | null; service_mac_address: string | null; client_antenna_ip: string | null; client_antenna_mac: string | null; client_antenna_brand_model: string | null; client_antenna_device_name: string | null; technical_notes: string | null; client: Client; plan: Plan; mikrotik_router?: MikrotikRouter | null; histories?: History[] }
 type Meta = { current_page: number; last_page: number; total: number }
 type Action = { type: 'suspend' | 'reactivate' | 'plan' | 'technical'; service: Service }
-type TechnicalForm = { mikrotik_router_id: string; mikrotik_control_method: ControlMethod; pppoe_username: string; pppoe_profile: string; simple_queue_name: string; service_ip_address: string; service_mac_address: string; client_antenna_ip: string; client_antenna_mac: string; client_antenna_brand_model: string; client_antenna_device_name: string; technical_notes: string }
+type TechnicalForm = { mikrotik_router_id: string; mikrotik_control_method: ControlMethod; pppoe_username: string; pppoe_password: string; pppoe_profile: string; simple_queue_name: string; service_ip_address: string; service_mac_address: string; client_antenna_ip: string; client_antenna_mac: string; client_antenna_brand_model: string; client_antenna_device_name: string; technical_notes: string }
 
 export function ServicesPage() {
   const [services, setServices] = useState<Service[]>([])
@@ -129,6 +129,7 @@ function initialTechnicalForm(service?: Service | null): TechnicalForm {
     mikrotik_router_id: service?.mikrotik_router_id ? String(service.mikrotik_router_id) : '',
     mikrotik_control_method: service?.mikrotik_control_method ?? 'manual',
     pppoe_username: service?.pppoe_username ?? '',
+    pppoe_password: '',
     pppoe_profile: service?.pppoe_profile ?? '',
     simple_queue_name: service?.simple_queue_name ?? '',
     service_ip_address: service?.service_ip_address ?? '',
@@ -142,7 +143,7 @@ function initialTechnicalForm(service?: Service | null): TechnicalForm {
 }
 
 function technicalPayload(form: TechnicalForm) {
-  return {
+  const payload: Record<string, string | number | null> = {
     mikrotik_router_id: form.mikrotik_control_method === 'manual' ? null : Number(form.mikrotik_router_id),
     mikrotik_control_method: form.mikrotik_control_method,
     pppoe_username: form.pppoe_username || null,
@@ -156,6 +157,12 @@ function technicalPayload(form: TechnicalForm) {
     client_antenna_device_name: form.client_antenna_device_name || null,
     technical_notes: form.technical_notes || null,
   }
+
+  if (form.pppoe_password) {
+    payload.pppoe_password = form.pppoe_password
+  }
+
+  return payload
 }
 
 function NewServiceModal({ onClose, onSaved }: { onClose: () => void; onSaved: (text: string) => Promise<void> }) {
@@ -218,13 +225,13 @@ function TechnicalConfigFields({ form, setForm, routers, plan }: { form: Technic
     <div className="technical-section full">
       <span className="eyebrow">Configuracion tecnica</span>
       <div className="method-options">
-        <label><input type="radio" checked={form.mikrotik_control_method === 'manual'} onChange={() => setForm({ ...form, mikrotik_control_method: 'manual', mikrotik_router_id: '', pppoe_username: '', pppoe_profile: '', simple_queue_name: '', service_ip_address: '' })} /> Manual</label>
+        <label><input type="radio" checked={form.mikrotik_control_method === 'manual'} onChange={() => setForm({ ...form, mikrotik_control_method: 'manual', mikrotik_router_id: '', pppoe_username: '', pppoe_password: '', pppoe_profile: '', simple_queue_name: '', service_ip_address: '' })} /> Manual</label>
         <label><input type="radio" checked={form.mikrotik_control_method === 'pppoe'} onChange={() => setForm({ ...form, mikrotik_control_method: 'pppoe', simple_queue_name: '', service_ip_address: '' })} /> PPPoE</label>
-        <label><input type="radio" checked={form.mikrotik_control_method === 'simple_queue'} onChange={() => setForm({ ...form, mikrotik_control_method: 'simple_queue', pppoe_username: '', pppoe_profile: '' })} /> Simple Queue</label>
+        <label><input type="radio" checked={form.mikrotik_control_method === 'simple_queue'} onChange={() => setForm({ ...form, mikrotik_control_method: 'simple_queue', pppoe_username: '', pppoe_password: '', pppoe_profile: '' })} /> Simple Queue</label>
       </div>
     </div>
     {managed && <label className="field full"><span>Router MikroTik *</span><select required value={form.mikrotik_router_id} onChange={(event) => setForm({ ...form, mikrotik_router_id: event.target.value })}><option value="">Selecciona un router activo</option>{routers.map((router) => <option key={router.id} value={router.id}>{router.name} - {router.connection_status}</option>)}</select></label>}
-    {form.mikrotik_control_method === 'pppoe' && <><label className="field"><span>Usuario PPPoE *</span><input required maxLength={100} placeholder="juan.perez" value={form.pppoe_username} onChange={(event) => setForm({ ...form, pppoe_username: event.target.value })} /></label><label className="field"><span>Perfil PPPoE *</span><input required maxLength={100} placeholder="plan-30m" value={form.pppoe_profile} onChange={(event) => setForm({ ...form, pppoe_profile: event.target.value })} /></label></>}
+    {form.mikrotik_control_method === 'pppoe' && <><label className="field"><span>Usuario PPPoE *</span><input required maxLength={100} placeholder="juan.perez" value={form.pppoe_username} onChange={(event) => setForm({ ...form, pppoe_username: event.target.value })} /></label><label className="field"><span>Contraseña PPPoE</span><input type="password" maxLength={255} autoComplete="new-password" placeholder="Solo escribir para crear o cambiar" value={form.pppoe_password} onChange={(event) => setForm({ ...form, pppoe_password: event.target.value })} /></label><label className="field"><span>Perfil PPPoE *</span><input required maxLength={100} placeholder="plan-30m" value={form.pppoe_profile} onChange={(event) => setForm({ ...form, pppoe_profile: event.target.value })} /></label></>}
     {form.mikrotik_control_method === 'simple_queue' && <><label className="field"><span>IP del cliente *</span><input required placeholder="192.168.10.20" value={form.service_ip_address} onChange={(event) => setForm({ ...form, service_ip_address: event.target.value })} /></label><label className="field"><span>Nombre de cola *</span><input required maxLength={100} placeholder="cliente-juan" value={form.simple_queue_name} onChange={(event) => setForm({ ...form, simple_queue_name: event.target.value })} /></label><div className="technical-speed full"><span>Velocidad MikroTik</span><strong>{plan ? `${plan.download_mbps}M/${plan.upload_mbps}M` : 'Selecciona un plan'}</strong></div></>}
     <label className="field"><span>MAC del servicio</span><input placeholder="AA:BB:CC:DD:EE:01" value={form.service_mac_address} onChange={(event) => setForm({ ...form, service_mac_address: event.target.value })} /></label>
     <label className="field"><span>IP de antena</span><input placeholder="192.168.20.10" value={form.client_antenna_ip} onChange={(event) => setForm({ ...form, client_antenna_ip: event.target.value })} /></label>

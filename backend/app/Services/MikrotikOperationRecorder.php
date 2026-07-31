@@ -38,7 +38,7 @@ class MikrotikOperationRecorder
             throw new InvalidArgumentException("Unsupported MikroTik action [{$action}].");
         }
 
-        $service->loadMissing(['client.zone', 'plan']);
+        $service->loadMissing(['client.zone', 'plan', 'mikrotikRouter']);
 
         if (! $service->requiresMikrotikSync()) {
             return null;
@@ -57,6 +57,11 @@ class MikrotikOperationRecorder
                     'control_method' => $service->mikrotik_control_method,
                     'router_id' => $service->mikrotik_router_id,
                 ],
+                'router' => $service->mikrotikRouter ? [
+                    'id' => $service->mikrotikRouter->id,
+                    'name' => $service->mikrotikRouter->name,
+                    'connection_status' => $service->mikrotikRouter->connection_status,
+                ] : null,
                 'client' => [
                     'id' => $service->client->id,
                     'full_name' => $service->client->full_name,

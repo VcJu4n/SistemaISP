@@ -10,6 +10,7 @@ use App\Models\Plan;
 use App\Models\User;
 use App\Models\Zone;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -44,6 +45,7 @@ class InternetServiceTest extends TestCase
             'mikrotik_router_id' => $router->id,
             'mikrotik_control_method' => 'pppoe',
             'pppoe_username' => 'juan.perez',
+            'pppoe_password' => 'cliente-secret',
             'pppoe_profile' => 'plan-30m',
             'client_antenna_ip' => '192.168.20.10',
             'client_antenna_mac' => 'AA:BB:CC:DD:EE:01',
@@ -52,7 +54,8 @@ class InternetServiceTest extends TestCase
             'technical_notes' => 'Instalada en techo.',
         ])->assertCreated()
             ->assertJsonPath('data.mikrotik_control_method', 'pppoe')
-            ->assertJsonPath('data.client_antenna_ip', '192.168.20.10');
+            ->assertJsonPath('data.client_antenna_ip', '192.168.20.10')
+            ->assertJsonMissingPath('data.pppoe_password');
 
         $this->assertDatabaseHas('mikrotik_operations', [
             'internet_service_id' => 1,
@@ -60,9 +63,14 @@ class InternetServiceTest extends TestCase
             'action' => MikrotikOperation::ACTION_CREATE_ACCESS,
             'status' => MikrotikOperation::STATUS_PENDING,
         ]);
+
+        $operation = MikrotikOperation::query()->firstOrFail();
+        $this->assertArrayNotHasKey('password', $operation->payload['technical_config']['pppoe']);
+        $this->assertTrue($operation->payload['technical_config']['pppoe']['password_configured']);
+        $this->assertNotSame('cliente-secret', DB::table('internet_services')->where('id', 1)->value('pppoe_password'));
     }
 
-    public function test_pppoe_technical_config_requires_router_user_and_profile(): void
+    public function test_pppoe_technical_config_requires_router_user_password_and_profile(): void
     {
         [$client, $plan] = $this->clientAndPlan();
 
@@ -71,7 +79,7 @@ class InternetServiceTest extends TestCase
             'plan_id' => $plan->id,
             'mikrotik_control_method' => 'pppoe',
         ])->assertUnprocessable()
-            ->assertJsonValidationErrors(['mikrotik_router_id', 'pppoe_username', 'pppoe_profile']);
+            ->assertJsonValidationErrors(['mikrotik_router_id', 'pppoe_username', 'pppoe_password', 'pppoe_profile']);
     }
 
     public function test_simple_queue_service_stores_router_ip_queue_name_and_speed_payload(): void
@@ -106,6 +114,7 @@ class InternetServiceTest extends TestCase
             'mikrotik_router_id' => $router->id,
             'mikrotik_control_method' => 'pppoe',
             'pppoe_username' => 'maria.gomez',
+            'pppoe_password' => 'maria-secret',
             'pppoe_profile' => 'plan-30m',
             'client_antenna_ip' => '192.168.20.11',
             'client_antenna_mac' => 'AA:BB:CC:DD:EE:11',
@@ -115,12 +124,16 @@ class InternetServiceTest extends TestCase
         ])->assertOk()
             ->assertJsonPath('data.mikrotik_router.id', $router->id)
             ->assertJsonPath('data.mikrotik_control_method', 'pppoe')
-            ->assertJsonPath('data.pppoe_username', 'maria.gomez');
+            ->assertJsonPath('data.pppoe_username', 'maria.gomez')
+            ->assertJsonMissingPath('data.pppoe_password');
 
         $this->assertDatabaseHas('service_histories', [
             'internet_service_id' => $service->id,
             'event_type' => 'technical_config_updated',
         ]);
+        $history = $service->histories()->where('event_type', 'technical_config_updated')->firstOrFail();
+        $this->assertArrayNotHasKey('pppoe_password', $history->metadata['before']);
+        $this->assertArrayNotHasKey('pppoe_password', $history->metadata['after']);
         $this->assertDatabaseHas('mikrotik_operations', [
             'internet_service_id' => $service->id,
             'mikrotik_router_id' => $router->id,
@@ -157,6 +170,7 @@ class InternetServiceTest extends TestCase
             'mikrotik_router_id' => $router->id,
             'mikrotik_control_method' => 'pppoe',
             'pppoe_username' => 'duplicado',
+            'pppoe_password' => 'secret-1',
             'pppoe_profile' => 'plan-10m',
         ]);
         [$client, $plan] = $this->clientAndPlan();
@@ -167,6 +181,7 @@ class InternetServiceTest extends TestCase
             'mikrotik_router_id' => $router->id,
             'mikrotik_control_method' => 'pppoe',
             'pppoe_username' => 'duplicado',
+            'pppoe_password' => 'secret-2',
             'pppoe_profile' => 'plan-30m',
         ])->assertUnprocessable()
             ->assertJsonValidationErrors('pppoe_username');

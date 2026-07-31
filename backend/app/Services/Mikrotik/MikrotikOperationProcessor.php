@@ -46,7 +46,7 @@ class MikrotikOperationProcessor
         $batchSize = $limit ?? (int) config('mikrotik.operations.batch_size', 20);
 
         return MikrotikOperation::query()
-            ->with(['service.client.zone', 'service.plan'])
+            ->with(['service.client.zone', 'service.plan', 'service.mikrotikRouter'])
             ->where('attempts', '<', $maxAttempts)
             ->where(function ($query) use ($retryFailed): void {
                 $query->where('status', MikrotikOperation::STATUS_PENDING);
@@ -74,7 +74,7 @@ class MikrotikOperationProcessor
 
             $lockedOperation->markProcessing();
 
-            return $lockedOperation->fresh(['service.client.zone', 'service.plan']);
+            return $lockedOperation->fresh(['service.client.zone', 'service.plan', 'service.mikrotikRouter']);
         });
     }
 
