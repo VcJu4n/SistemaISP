@@ -225,7 +225,7 @@ export function MikrotikRoutersPage() {
 
 function MikrotikRouterModal({ router, onClose, onSaved }: { router: MikrotikRouter | null; onClose: () => void; onSaved: (text: string) => Promise<void> }) {
   const [form, setForm] = useState({
-    name: router?.name ?? 'MikroTik principal',
+    name: router?.name ?? '',
     ip_address: router?.ip_address ?? '',
     api_port: String(router?.api_port ?? 8728),
     username: router?.username ?? '',
@@ -285,7 +285,7 @@ function MikrotikRouterModal({ router, onClose, onSaved }: { router: MikrotikRou
         <form className="client-form" onSubmit={submit}>
           <label className="field full">
             <span>Nombre *</span>
-            <input required maxLength={100} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+            <input required maxLength={100} placeholder="MikroTik nombre" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
           </label>
           <label className="field">
             <span>IP local *</span>

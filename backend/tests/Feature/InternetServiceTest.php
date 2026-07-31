@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Client;
 use App\Models\InternetService;
 use App\Models\MikrotikOperation;
+use App\Models\MikrotikRouter;
 use App\Models\Plan;
 use App\Models\User;
 use App\Models\Zone;
@@ -35,10 +36,12 @@ class InternetServiceTest extends TestCase
     public function test_mikrotik_service_assignment_creates_pending_access_operation(): void
     {
         [$client, $plan] = $this->clientAndPlan();
+        $router = MikrotikRouter::factory()->create();
 
         $this->postJson('/api/services', [
             'client_id' => $client->id,
             'plan_id' => $plan->id,
+            'mikrotik_router_id' => $router->id,
             'mikrotik_control_method' => 'pppoe',
             'pppoe_username' => 'juan.perez',
             'pppoe_profile' => 'plan-30m',
@@ -53,9 +56,120 @@ class InternetServiceTest extends TestCase
 
         $this->assertDatabaseHas('mikrotik_operations', [
             'internet_service_id' => 1,
+            'mikrotik_router_id' => $router->id,
             'action' => MikrotikOperation::ACTION_CREATE_ACCESS,
             'status' => MikrotikOperation::STATUS_PENDING,
         ]);
+    }
+
+    public function test_pppoe_technical_config_requires_router_user_and_profile(): void
+    {
+        [$client, $plan] = $this->clientAndPlan();
+
+        $this->postJson('/api/services', [
+            'client_id' => $client->id,
+            'plan_id' => $plan->id,
+            'mikrotik_control_method' => 'pppoe',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['mikrotik_router_id', 'pppoe_username', 'pppoe_profile']);
+    }
+
+    public function test_simple_queue_service_stores_router_ip_queue_name_and_speed_payload(): void
+    {
+        [$client, $plan] = $this->clientAndPlan();
+        $router = MikrotikRouter::factory()->create(['name' => 'MikroTik principal']);
+
+        $serviceId = $this->postJson('/api/services', [
+            'client_id' => $client->id,
+            'plan_id' => $plan->id,
+            'mikrotik_router_id' => $router->id,
+            'mikrotik_control_method' => 'simple_queue',
+            'simple_queue_name' => 'cliente-juan',
+            'service_ip_address' => '192.168.10.20',
+            'service_mac_address' => 'AA:BB:CC:DD:EE:10',
+        ])->assertCreated()
+            ->assertJsonPath('data.mikrotik_router.name', 'MikroTik principal')
+            ->assertJsonPath('data.mikrotik_control_method', 'simple_queue')
+            ->assertJsonPath('data.simple_queue_name', 'cliente-juan')
+            ->json('data.id');
+
+        $operation = MikrotikOperation::query()->where('internet_service_id', $serviceId)->firstOrFail();
+        $this->assertSame("{$plan->download_mbps}M/{$plan->upload_mbps}M", $operation->payload['technical_config']['simple_queue']['max_limit']);
+    }
+
+    public function test_service_technical_config_can_be_updated_and_queues_sync_operation(): void
+    {
+        $service = $this->service();
+        $router = MikrotikRouter::factory()->create();
+
+        $this->putJson("/api/services/{$service->id}/technical-config", [
+            'mikrotik_router_id' => $router->id,
+            'mikrotik_control_method' => 'pppoe',
+            'pppoe_username' => 'maria.gomez',
+            'pppoe_profile' => 'plan-30m',
+            'client_antenna_ip' => '192.168.20.11',
+            'client_antenna_mac' => 'AA:BB:CC:DD:EE:11',
+            'client_antenna_brand_model' => 'Ubiquiti LiteBeam',
+            'client_antenna_device_name' => 'antena-maria',
+            'technical_notes' => 'Configurada desde soporte.',
+        ])->assertOk()
+            ->assertJsonPath('data.mikrotik_router.id', $router->id)
+            ->assertJsonPath('data.mikrotik_control_method', 'pppoe')
+            ->assertJsonPath('data.pppoe_username', 'maria.gomez');
+
+        $this->assertDatabaseHas('service_histories', [
+            'internet_service_id' => $service->id,
+            'event_type' => 'technical_config_updated',
+        ]);
+        $this->assertDatabaseHas('mikrotik_operations', [
+            'internet_service_id' => $service->id,
+            'mikrotik_router_id' => $router->id,
+            'action' => MikrotikOperation::ACTION_CREATE_ACCESS,
+            'status' => MikrotikOperation::STATUS_PENDING,
+        ]);
+    }
+
+    public function test_manual_technical_config_clears_router_and_method_specific_fields(): void
+    {
+        $service = $this->service([
+            'mikrotik_router_id' => MikrotikRouter::factory(),
+            'mikrotik_control_method' => 'simple_queue',
+            'simple_queue_name' => 'cliente-juan',
+            'service_ip_address' => '192.168.10.20',
+            'technical_notes' => 'Mantener observacion.',
+        ]);
+
+        $this->putJson("/api/services/{$service->id}/technical-config", [
+            'mikrotik_control_method' => 'manual',
+            'technical_notes' => 'Mantener observacion.',
+        ])->assertOk()
+            ->assertJsonPath('data.mikrotik_router_id', null)
+            ->assertJsonPath('data.mikrotik_control_method', 'manual')
+            ->assertJsonPath('data.simple_queue_name', null)
+            ->assertJsonPath('data.service_ip_address', null)
+            ->assertJsonPath('data.technical_notes', 'Mantener observacion.');
+    }
+
+    public function test_mikrotik_identifiers_must_be_unique_between_services(): void
+    {
+        $router = MikrotikRouter::factory()->create();
+        $this->service([
+            'mikrotik_router_id' => $router->id,
+            'mikrotik_control_method' => 'pppoe',
+            'pppoe_username' => 'duplicado',
+            'pppoe_profile' => 'plan-10m',
+        ]);
+        [$client, $plan] = $this->clientAndPlan();
+
+        $this->postJson('/api/services', [
+            'client_id' => $client->id,
+            'plan_id' => $plan->id,
+            'mikrotik_router_id' => $router->id,
+            'mikrotik_control_method' => 'pppoe',
+            'pppoe_username' => 'duplicado',
+            'pppoe_profile' => 'plan-30m',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('pppoe_username');
     }
 
     public function test_client_cannot_have_two_services(): void

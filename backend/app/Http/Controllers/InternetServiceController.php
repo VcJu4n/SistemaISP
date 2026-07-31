@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ChangeServicePlanRequest;
 use App\Http\Requests\StoreInternetServiceRequest;
 use App\Http\Requests\SuspendServiceRequest;
+use App\Http\Requests\UpdateServiceTechnicalConfigRequest;
 use App\Models\Client;
 use App\Models\InternetService;
 use App\Models\Plan;
@@ -63,7 +64,7 @@ class InternetServiceController extends Controller
 
         $this->validatePlanForClient($plan, $client);
 
-        $data['mikrotik_control_method'] ??= 'manual';
+        $data = StoreInternetServiceRequest::normalizeTechnicalConfig($data);
 
         $service = DB::transaction(function () use ($data, $client, $plan): InternetService {
             $service = InternetService::query()->create([...$data, 'status' => 'active']);
@@ -154,6 +155,32 @@ class InternetServiceController extends Controller
         return response()->json(['message' => 'Plan cambiado correctamente.', 'data' => $this->loadService($service)]);
     }
 
+    public function updateTechnicalConfig(UpdateServiceTechnicalConfigRequest $request, InternetService $service): JsonResponse
+    {
+        $data = UpdateServiceTechnicalConfigRequest::normalizeTechnicalConfig($request->validated());
+        $before = $service->only($this->technicalConfigFields());
+        $syncFieldsChanged = $this->technicalSyncFieldsChanged($service, $data);
+
+        DB::transaction(function () use ($service, $data, $before, $syncFieldsChanged): void {
+            $service->update($data);
+            $service->histories()->create([
+                'event_type' => 'technical_config_updated',
+                'description' => 'Configuracion tecnica MikroTik actualizada.',
+                'metadata' => [
+                    'before' => $before,
+                    'after' => $service->fresh()->only($this->technicalConfigFields()),
+                ],
+                'occurred_at' => now(),
+            ]);
+
+            if ($syncFieldsChanged && $service->fresh()->requiresMikrotikSync()) {
+                $this->mikrotikOperations->createAccess($service->fresh());
+            }
+        });
+
+        return response()->json(['message' => 'Configuracion tecnica actualizada correctamente.', 'data' => $this->loadService($service)]);
+    }
+
     private function validatePlanForClient(Plan $plan, Client $client): void
     {
         if (! $plan->active) {
@@ -166,9 +193,48 @@ class InternetServiceController extends Controller
 
     private function loadService(InternetService $service, bool $withHistory = false): InternetService
     {
-        $relations = ['client.zone:id,name', 'plan:id,name,download_mbps,upload_mbps,monthly_price,active'];
+        $relations = [
+            'client.zone:id,name',
+            'plan:id,name,download_mbps,upload_mbps,monthly_price,active',
+            'mikrotikRouter:id,name,connection_status,active',
+        ];
         if ($withHistory) $relations[] = 'histories';
-        if ($withHistory) $relations[] = 'mikrotikOperations';
+        if ($withHistory) $relations[] = 'mikrotikOperations.router:id,name,connection_status,active';
         return $service->fresh()->load($relations);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function technicalConfigFields(): array
+    {
+        return [
+            'mikrotik_router_id',
+            'mikrotik_control_method',
+            'pppoe_username',
+            'pppoe_profile',
+            'simple_queue_name',
+            'service_ip_address',
+            'service_mac_address',
+            'client_antenna_ip',
+            'client_antenna_mac',
+            'client_antenna_brand_model',
+            'client_antenna_device_name',
+            'technical_notes',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function technicalSyncFieldsChanged(InternetService $service, array $data): bool
+    {
+        foreach (['mikrotik_router_id', 'mikrotik_control_method', 'pppoe_username', 'pppoe_profile', 'simple_queue_name', 'service_ip_address', 'service_mac_address'] as $field) {
+            if (array_key_exists($field, $data) && $service->{$field} !== $data[$field]) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

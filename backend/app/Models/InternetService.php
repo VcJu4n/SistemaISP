@@ -52,6 +52,7 @@ class InternetService extends Model
             'simple_queue' => [
                 'name' => $this->simple_queue_name,
                 'ip_address' => $this->service_ip_address,
+                'max_limit' => $this->plan ? "{$this->plan->download_mbps}M/{$this->plan->upload_mbps}M" : null,
             ],
             'mac_address' => $this->service_mac_address,
             'antenna' => [

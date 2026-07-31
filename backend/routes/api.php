@@ -28,4 +28,5 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('services/{service}/suspend', [InternetServiceController::class, 'suspend']);
     Route::post('services/{service}/reactivate', [InternetServiceController::class, 'reactivate']);
     Route::put('services/{service}/plan', [InternetServiceController::class, 'changePlan']);
+    Route::put('services/{service}/technical-config', [InternetServiceController::class, 'updateTechnicalConfig']);
 });

@@ -179,6 +179,20 @@ tbody tr:hover { background: #fbfdfc; }
 .timeline time { color: var(--muted); font-size: 11px; }
 .success-icon { width: 54px; height: 54px; margin: 0 auto 15px; display: grid; place-items: center; color: var(--green-800); background: var(--green-100); border-radius: 15px; }
 .current-plan { margin: -6px 0 18px; color: var(--muted); }
+.technical-badge { display: grid; gap: 4px; }
+.technical-badge small { color: var(--muted); font-size: 11px; font-weight: 700; }
+.technical-section { margin: 14px 0 2px; padding: 14px; display: grid; gap: 12px; background: #f8fbfa; border: 1px solid var(--line); border-radius: 12px; }
+.method-options { display: flex; flex-wrap: wrap; gap: 10px; }
+.method-options label { min-height: 38px; padding: 8px 12px; display: flex; align-items: center; gap: 7px; color: #30453c; background: white; border: 1px solid #d9e5e0; border-radius: 9px; font-size: 13px; font-weight: 800; cursor: pointer; }
+.method-options input { accent-color: var(--green-800); }
+.technical-speed { margin: 2px 0 8px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); background: #f5f9f7; border: 1px solid var(--line); border-radius: 10px; font-size: 13px; font-weight: 700; }
+.technical-speed strong { color: var(--green-950); }
+.technical-summary { margin: 0 0 24px; padding: 16px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px; background: #f5f9f7; border-radius: 13px; }
+.technical-summary h3 { grid-column: 1 / -1; margin: 0; }
+.technical-summary div { display: grid; gap: 5px; }
+.technical-summary div.full { grid-column: 1 / -1; }
+.technical-summary span { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.technical-summary strong { color: var(--green-950); font-size: 13px; overflow-wrap: anywhere; }
 .routers-page .page-heading p { margin: 7px 0 0; color: var(--muted); }
 .router-health { margin-bottom: 18px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .router-health article { min-height: 88px; padding: 18px; display: flex; align-items: center; gap: 13px; background: white; border: 1px solid var(--line); border-radius: 14px; }
@@ -213,6 +227,7 @@ tbody tr:hover { background: #fbfdfc; }
   .catalog-grid { grid-template-columns: 1fr; }
   .service-filters { grid-template-columns: 1fr; }
   .service-summary { grid-template-columns: 1fr 1fr; }
+  .technical-summary { grid-template-columns: 1fr; }
   .router-health { grid-template-columns: 1fr; }
   .router-filters { grid-template-columns: 1fr; }
 }
