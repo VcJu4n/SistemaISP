@@ -102,6 +102,9 @@ tbody tr:hover { background: #fbfdfc; }
 .status-badge.connected { color: #126146; background: #ddf5e9; }
 .status-badge.disconnected { color: #a52a21; background: #fee7e5; }
 .status-badge.pending { color: #795400; background: #fff4c7; }
+.status-badge.processing { color: #795400; background: #fff4c7; }
+.status-badge.synced { color: #126146; background: #ddf5e9; }
+.status-badge.failed { color: #a52a21; background: #fee7e5; }
 .row-actions { display: flex; justify-content: flex-end; gap: 5px; }
 .row-actions button { width: 34px; height: 34px; display: grid; place-items: center; color: #60716a; background: #f2f6f4; border: 0; border-radius: 8px; cursor: pointer; }
 .row-actions button.danger { color: #b42318; background: #fff0ee; }
@@ -193,6 +196,14 @@ tbody tr:hover { background: #fbfdfc; }
 .technical-summary div.full { grid-column: 1 / -1; }
 .technical-summary span { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
 .technical-summary strong { color: var(--green-950); font-size: 13px; overflow-wrap: anywhere; }
+.sync-list { margin: 0 0 24px; padding: 16px; display: grid; gap: 10px; background: white; border: 1px solid var(--line); border-radius: 13px; }
+.sync-list h3 { margin: 0; }
+.sync-list article { padding: 11px 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; border-top: 1px solid #edf2ef; }
+.sync-list article:first-of-type { border-top: 0; }
+.sync-list article div { display: grid; gap: 4px; }
+.sync-list strong { color: var(--green-950); font-size: 13px; }
+.sync-list span:not(.status-badge), .sync-list p { margin: 0; color: var(--muted); font-size: 12px; }
+.sync-list small { color: #8a1c13; font-size: 11px; overflow-wrap: anywhere; }
 .routers-page .page-heading p { margin: 7px 0 0; color: var(--muted); }
 .router-health { margin-bottom: 18px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .router-health article { min-height: 88px; padding: 18px; display: flex; align-items: center; gap: 13px; background: white; border: 1px solid var(--line); border-radius: 14px; }

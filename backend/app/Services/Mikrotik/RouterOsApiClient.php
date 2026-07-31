@@ -32,6 +32,28 @@ class RouterOsApiClient
         });
     }
 
+    public function findOneId(MikrotikRouter $router, string $path, string $field, string $value): string
+    {
+        $rows = [];
+
+        $this->withAuthenticatedConnection($router, function () use ($path, $field, $value, &$rows): void {
+            $this->writeSentence([
+                "{$path}/print",
+                '=.proplist=.id',
+                "?{$field}={$value}",
+            ]);
+            $rows = $this->readRowsReply();
+        });
+
+        $id = $rows[0]['.id'] ?? null;
+
+        if (! is_string($id) || $id === '') {
+            throw new RuntimeException("No se encontro el registro RouterOS [{$path}] con {$field}={$value}.");
+        }
+
+        return $id;
+    }
+
     private function withAuthenticatedConnection(MikrotikRouter $router, callable $callback): void
     {
         $this->connect($router);
@@ -205,6 +227,33 @@ class RouterOsApiClient
                     'attributes' => $attributes,
                     'error' => $attributes['message'] ?? 'RouterOS rechazo la conexion API.',
                 ];
+            }
+        }
+    }
+
+    /**
+     * @return list<array<string, string>>
+     */
+    private function readRowsReply(): array
+    {
+        $rows = [];
+
+        while (true) {
+            $sentence = $this->readSentence();
+            $type = $sentence[0] ?? null;
+            $attributes = $this->parseAttributes($sentence);
+
+            if ($type === '!re') {
+                $rows[] = $attributes;
+                continue;
+            }
+
+            if ($type === '!done') {
+                return $rows;
+            }
+
+            if ($type === '!trap' || $type === '!fatal') {
+                throw new RuntimeException($attributes['message'] ?? 'RouterOS rechazo la consulta API.');
             }
         }
     }

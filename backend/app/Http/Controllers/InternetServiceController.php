@@ -130,7 +130,8 @@ class InternetServiceController extends Controller
 
     public function changePlan(ChangeServicePlanRequest $request, InternetService $service): JsonResponse
     {
-        $plan = Plan::query()->with('zones:id')->findOrFail($request->integer('plan_id'));
+        $data = $request->validated();
+        $plan = Plan::query()->with('zones:id')->findOrFail($data['plan_id']);
         $service->load('client');
 
         if ($plan->id === $service->plan_id) {
@@ -140,13 +141,25 @@ class InternetServiceController extends Controller
         $this->validatePlanForClient($plan, $service->client);
         $previousPlan = $service->plan;
 
-        DB::transaction(function () use ($service, $plan, $previousPlan): void {
-            $service->update(['plan_id' => $plan->id]);
+        DB::transaction(function () use ($service, $plan, $previousPlan, $data): void {
+            $changes = ['plan_id' => $plan->id];
+
+            if ($service->mikrotik_control_method === 'pppoe') {
+                $changes['pppoe_profile'] = $data['pppoe_profile'];
+            }
+
+            $service->update($changes);
             $service->setRelation('plan', $plan);
             $service->histories()->create([
                 'event_type' => 'plan_changed',
                 'description' => "Plan cambiado de {$previousPlan->name} a {$plan->name}.",
-                'metadata' => ['previous_plan_id' => $previousPlan->id, 'previous_plan_name' => $previousPlan->name, 'new_plan_id' => $plan->id, 'new_plan_name' => $plan->name],
+                'metadata' => [
+                    'previous_plan_id' => $previousPlan->id,
+                    'previous_plan_name' => $previousPlan->name,
+                    'new_plan_id' => $plan->id,
+                    'new_plan_name' => $plan->name,
+                    'pppoe_profile' => $changes['pppoe_profile'] ?? null,
+                ],
                 'occurred_at' => now(),
             ]);
             $this->mikrotikOperations->changePlan($service, $previousPlan, $plan);

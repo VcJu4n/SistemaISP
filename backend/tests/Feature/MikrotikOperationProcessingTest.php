@@ -150,6 +150,127 @@ class MikrotikOperationProcessingTest extends TestCase
             "=comment=SistemaISP servicio #{$service->id}",
         ], $client->command);
     }
+
+    public function test_routeros_executor_suspends_and_reactivates_pppoe_secret(): void
+    {
+        $router = MikrotikRouter::factory()->create();
+        $service = InternetService::factory()->create([
+            'mikrotik_router_id' => $router->id,
+            'mikrotik_control_method' => 'pppoe',
+            'pppoe_username' => 'juan.perez',
+            'pppoe_password' => 'cliente-secret',
+            'pppoe_profile' => 'plan-30m',
+        ]);
+        $client = new RecordingRouterOsApiClient();
+        $client->ids['/ppp/secret|name|juan.perez'] = '*ppp1';
+
+        (new RouterOsMikrotikOperationExecutor($client))->execute(MikrotikOperation::factory()->create([
+            'internet_service_id' => $service->id,
+            'mikrotik_router_id' => $router->id,
+            'action' => MikrotikOperation::ACTION_SUSPEND,
+        ]));
+        (new RouterOsMikrotikOperationExecutor($client))->execute(MikrotikOperation::factory()->create([
+            'internet_service_id' => $service->id,
+            'mikrotik_router_id' => $router->id,
+            'action' => MikrotikOperation::ACTION_REACTIVATE,
+        ]));
+
+        $this->assertSame('/ppp/secret|name|juan.perez', $client->lookups[0]);
+        $this->assertSame([
+            '/ppp/secret/set',
+            '=.id=*ppp1',
+            '=disabled=yes',
+            "=comment=SistemaISP servicio #{$service->id}",
+        ], $client->commands[0]);
+        $this->assertSame([
+            '/ppp/secret/set',
+            '=.id=*ppp1',
+            '=disabled=no',
+            "=comment=SistemaISP servicio #{$service->id}",
+        ], $client->commands[1]);
+    }
+
+    public function test_routeros_executor_suspends_and_reactivates_simple_queue(): void
+    {
+        $router = MikrotikRouter::factory()->create();
+        $service = InternetService::factory()->create([
+            'mikrotik_router_id' => $router->id,
+            'mikrotik_control_method' => 'simple_queue',
+            'simple_queue_name' => 'cliente-juan',
+            'service_ip_address' => '192.168.10.20',
+        ]);
+        $client = new RecordingRouterOsApiClient();
+        $client->ids['/queue/simple|name|cliente-juan'] = '*queue1';
+
+        (new RouterOsMikrotikOperationExecutor($client))->execute(MikrotikOperation::factory()->create([
+            'internet_service_id' => $service->id,
+            'mikrotik_router_id' => $router->id,
+            'action' => MikrotikOperation::ACTION_SUSPEND,
+        ]));
+        (new RouterOsMikrotikOperationExecutor($client))->execute(MikrotikOperation::factory()->create([
+            'internet_service_id' => $service->id,
+            'mikrotik_router_id' => $router->id,
+            'action' => MikrotikOperation::ACTION_REACTIVATE,
+        ]));
+
+        $this->assertSame([
+            '/queue/simple/set',
+            '=.id=*queue1',
+            '=disabled=yes',
+            "=comment=SistemaISP servicio #{$service->id}",
+        ], $client->commands[0]);
+        $this->assertSame([
+            '/queue/simple/set',
+            '=.id=*queue1',
+            '=disabled=no',
+            "=comment=SistemaISP servicio #{$service->id}",
+        ], $client->commands[1]);
+    }
+
+    public function test_routeros_executor_changes_pppoe_profile_and_simple_queue_speed(): void
+    {
+        $router = MikrotikRouter::factory()->create();
+        $pppoe = InternetService::factory()->create([
+            'mikrotik_router_id' => $router->id,
+            'mikrotik_control_method' => 'pppoe',
+            'pppoe_username' => 'maria.gomez',
+            'pppoe_password' => 'cliente-secret',
+            'pppoe_profile' => 'plan-30m',
+        ]);
+        $queue = InternetService::factory()->create([
+            'mikrotik_router_id' => $router->id,
+            'mikrotik_control_method' => 'simple_queue',
+            'simple_queue_name' => 'cliente-maria',
+            'service_ip_address' => '192.168.10.21',
+        ]);
+        $client = new RecordingRouterOsApiClient();
+        $client->ids['/ppp/secret|name|maria.gomez'] = '*ppp2';
+        $client->ids['/queue/simple|name|cliente-maria'] = '*queue2';
+
+        (new RouterOsMikrotikOperationExecutor($client))->execute(MikrotikOperation::factory()->create([
+            'internet_service_id' => $pppoe->id,
+            'mikrotik_router_id' => $router->id,
+            'action' => MikrotikOperation::ACTION_CHANGE_PLAN,
+        ]));
+        (new RouterOsMikrotikOperationExecutor($client))->execute(MikrotikOperation::factory()->create([
+            'internet_service_id' => $queue->id,
+            'mikrotik_router_id' => $router->id,
+            'action' => MikrotikOperation::ACTION_CHANGE_PLAN,
+        ]));
+
+        $this->assertSame([
+            '/ppp/secret/set',
+            '=.id=*ppp2',
+            '=profile=plan-30m',
+            "=comment=SistemaISP servicio #{$pppoe->id}",
+        ], $client->commands[0]);
+        $this->assertSame([
+            '/queue/simple/set',
+            '=.id=*queue2',
+            "=max-limit={$queue->plan->upload_mbps}M/{$queue->plan->download_mbps}M",
+            "=comment=SistemaISP servicio #{$queue->id}",
+        ], $client->commands[1]);
+    }
 }
 
 class SuccessfulExecutor implements MikrotikOperationExecutor
@@ -175,9 +296,28 @@ class RecordingRouterOsApiClient extends RouterOsApiClient
     /** @var list<string> */
     public array $command = [];
 
+    /** @var list<list<string>> */
+    public array $commands = [];
+
+    /** @var array<string, string> */
+    public array $ids = [];
+
+    /** @var list<string> */
+    public array $lookups = [];
+
     public function executeCommand(MikrotikRouter $router, array $words): void
     {
         $this->router = $router;
         $this->command = $words;
+        $this->commands[] = $words;
+    }
+
+    public function findOneId(MikrotikRouter $router, string $path, string $field, string $value): string
+    {
+        $this->router = $router;
+        $key = "{$path}|{$field}|{$value}";
+        $this->lookups[] = $key;
+
+        return $this->ids[$key] ?? '*1';
     }
 }

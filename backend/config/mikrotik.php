@@ -10,5 +10,6 @@ return [
         'enabled' => env('MIKROTIK_OPERATION_PROCESSING_ENABLED', false),
         'batch_size' => env('MIKROTIK_OPERATION_BATCH_SIZE', 20),
         'max_attempts' => env('MIKROTIK_OPERATION_MAX_ATTEMPTS', 3),
+        'simple_queue_suspend_strategy' => env('MIKROTIK_SIMPLE_QUEUE_SUSPEND_STRATEGY', 'disable_queue'),
     ],
 ];

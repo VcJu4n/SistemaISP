@@ -13,10 +13,6 @@ class RouterOsMikrotikOperationExecutor implements MikrotikOperationExecutor
 
     public function execute(MikrotikOperation $operation): void
     {
-        if ($operation->action !== MikrotikOperation::ACTION_CREATE_ACCESS) {
-            throw new RuntimeException("La accion MikroTik [{$operation->action}] aun no esta implementada.");
-        }
-
         $operation->loadMissing(['service.plan', 'service.mikrotikRouter']);
         $service = $operation->service;
 
@@ -28,7 +24,13 @@ class RouterOsMikrotikOperationExecutor implements MikrotikOperationExecutor
             throw new RuntimeException('El servicio no tiene un router MikroTik activo asociado.');
         }
 
-        $this->client->executeCommand($service->mikrotikRouter, $this->createAccessCommand($service));
+        match ($operation->action) {
+            MikrotikOperation::ACTION_CREATE_ACCESS => $this->client->executeCommand($service->mikrotikRouter, $this->createAccessCommand($service)),
+            MikrotikOperation::ACTION_SUSPEND => $this->client->executeCommand($service->mikrotikRouter, $this->suspendCommand($service)),
+            MikrotikOperation::ACTION_REACTIVATE => $this->client->executeCommand($service->mikrotikRouter, $this->reactivateCommand($service)),
+            MikrotikOperation::ACTION_CHANGE_PLAN => $this->client->executeCommand($service->mikrotikRouter, $this->changePlanCommand($service)),
+            default => throw new RuntimeException("La accion MikroTik [{$operation->action}] no esta soportada."),
+        };
     }
 
     /**
@@ -40,6 +42,42 @@ class RouterOsMikrotikOperationExecutor implements MikrotikOperationExecutor
             'pppoe' => $this->pppoeCreateCommand($service),
             'simple_queue' => $this->simpleQueueCreateCommand($service),
             default => throw new RuntimeException("Metodo de control MikroTik [{$service->mikrotik_control_method}] no soportado para crear acceso."),
+        };
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function suspendCommand(InternetService $service): array
+    {
+        return match ($service->mikrotik_control_method) {
+            'pppoe' => $this->pppoeSetDisabledCommand($service, true),
+            'simple_queue' => $this->simpleQueueSetDisabledCommand($service, true),
+            default => throw new RuntimeException("Metodo de control MikroTik [{$service->mikrotik_control_method}] no soportado para suspender acceso."),
+        };
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function reactivateCommand(InternetService $service): array
+    {
+        return match ($service->mikrotik_control_method) {
+            'pppoe' => $this->pppoeSetDisabledCommand($service, false),
+            'simple_queue' => $this->simpleQueueSetDisabledCommand($service, false),
+            default => throw new RuntimeException("Metodo de control MikroTik [{$service->mikrotik_control_method}] no soportado para reactivar acceso."),
+        };
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function changePlanCommand(InternetService $service): array
+    {
+        return match ($service->mikrotik_control_method) {
+            'pppoe' => $this->pppoeChangeProfileCommand($service),
+            'simple_queue' => $this->simpleQueueChangeSpeedCommand($service),
+            default => throw new RuntimeException("Metodo de control MikroTik [{$service->mikrotik_control_method}] no soportado para cambiar plan."),
         };
     }
 
@@ -79,6 +117,88 @@ class RouterOsMikrotikOperationExecutor implements MikrotikOperationExecutor
             '=disabled=no',
             '=comment='.$this->comment($service),
         ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function pppoeSetDisabledCommand(InternetService $service, bool $disabled): array
+    {
+        if (! $service->pppoe_username) {
+            throw new RuntimeException('El servicio PPPoE no tiene usuario configurado.');
+        }
+
+        return [
+            '/ppp/secret/set',
+            '=.id='.$this->pppoeSecretId($service),
+            '=disabled='.($disabled ? 'yes' : 'no'),
+            '=comment='.$this->comment($service),
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function pppoeChangeProfileCommand(InternetService $service): array
+    {
+        if (! $service->pppoe_username || ! $service->pppoe_profile) {
+            throw new RuntimeException('La configuracion PPPoE esta incompleta para cambiar perfil.');
+        }
+
+        return [
+            '/ppp/secret/set',
+            '=.id='.$this->pppoeSecretId($service),
+            '=profile='.$service->pppoe_profile,
+            '=comment='.$this->comment($service),
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function simpleQueueSetDisabledCommand(InternetService $service, bool $disabled): array
+    {
+        if (config('mikrotik.operations.simple_queue_suspend_strategy') !== 'disable_queue') {
+            throw new RuntimeException('La estrategia de suspension Simple Queue configurada no esta soportada.');
+        }
+
+        if (! $service->simple_queue_name) {
+            throw new RuntimeException('El servicio Simple Queue no tiene nombre de cola configurado.');
+        }
+
+        return [
+            '/queue/simple/set',
+            '=.id='.$this->simpleQueueId($service),
+            '=disabled='.($disabled ? 'yes' : 'no'),
+            '=comment='.$this->comment($service),
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function simpleQueueChangeSpeedCommand(InternetService $service): array
+    {
+        if (! $service->simple_queue_name || ! $service->plan) {
+            throw new RuntimeException('La configuracion Simple Queue esta incompleta para cambiar velocidad.');
+        }
+
+        return [
+            '/queue/simple/set',
+            '=.id='.$this->simpleQueueId($service),
+            '=max-limit='.$this->maxLimit($service),
+            '=comment='.$this->comment($service),
+        ];
+    }
+
+    private function pppoeSecretId(InternetService $service): string
+    {
+        return $this->client->findOneId($service->mikrotikRouter, '/ppp/secret', 'name', $service->pppoe_username);
+    }
+
+    private function simpleQueueId(InternetService $service): string
+    {
+        return $this->client->findOneId($service->mikrotikRouter, '/queue/simple', 'name', $service->simple_queue_name);
     }
 
     private function queueTarget(string $ipAddress): string

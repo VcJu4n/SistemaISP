@@ -249,6 +249,34 @@ class InternetServiceTest extends TestCase
         $this->assertDatabaseHas('mikrotik_operations', ['internet_service_id' => $service->id, 'action' => MikrotikOperation::ACTION_CHANGE_PLAN, 'status' => MikrotikOperation::STATUS_PENDING]);
     }
 
+    public function test_pppoe_plan_change_requires_and_updates_new_profile(): void
+    {
+        $service = $this->service([
+            'mikrotik_router_id' => MikrotikRouter::factory(),
+            'mikrotik_control_method' => 'pppoe',
+            'pppoe_username' => 'juan.perez',
+            'pppoe_password' => 'cliente-secret',
+            'pppoe_profile' => 'plan-10m',
+        ]);
+        $newPlan = Plan::factory()->create(['active' => true]);
+        $newPlan->zones()->attach($service->client->zone_id);
+
+        $this->putJson("/api/services/{$service->id}/plan", ['plan_id' => $newPlan->id])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('pppoe_profile');
+
+        $this->putJson("/api/services/{$service->id}/plan", ['plan_id' => $newPlan->id, 'pppoe_profile' => 'plan-30m'])
+            ->assertOk()
+            ->assertJsonPath('data.plan.id', $newPlan->id)
+            ->assertJsonPath('data.pppoe_profile', 'plan-30m');
+
+        $this->assertDatabaseHas('mikrotik_operations', [
+            'internet_service_id' => $service->id,
+            'action' => MikrotikOperation::ACTION_CHANGE_PLAN,
+            'status' => MikrotikOperation::STATUS_PENDING,
+        ]);
+    }
+
     public function test_services_can_be_searched_and_filtered(): void
     {
         [$client, $plan] = $this->clientAndPlan();
