@@ -105,6 +105,9 @@ tbody tr:hover { background: #fbfdfc; }
 .status-badge.processing { color: #795400; background: #fff4c7; }
 .status-badge.synced { color: #126146; background: #ddf5e9; }
 .status-badge.failed { color: #a52a21; background: #fee7e5; }
+.status-badge.linked { color: #126146; background: #ddf5e9; }
+.status-badge.unlinked { color: #795400; background: #fff4c7; }
+.status-badge.ignored { color: #637069; background: #edf2ef; }
 .row-actions { display: flex; justify-content: flex-end; gap: 5px; }
 .row-actions button { width: 34px; height: 34px; display: grid; place-items: center; color: #60716a; background: #f2f6f4; border: 0; border-radius: 8px; cursor: pointer; }
 .row-actions button.danger { color: #b42318; background: #fff0ee; }
@@ -219,6 +222,16 @@ tbody tr:hover { background: #fbfdfc; }
 .router-name strong, .router-endpoint strong, .router-counts strong { color: var(--green-950); font-size: 14px; }
 .router-name span, .router-endpoint span, .router-counts span { color: var(--muted); font-size: 11px; font-weight: 700; }
 .connection-cell small { max-width: 230px; overflow: hidden; color: #8a1c13; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.import-modal { max-height: calc(100vh - 40px); overflow-y: auto; }
+.import-toolbar { margin-bottom: 14px; display: grid; grid-template-columns: 170px 190px auto; gap: 10px; }
+.import-toolbar select { min-height: 44px; padding: 10px 12px; color: #14201c; background: #fbfdfc; border: 1px solid #cad8d2; border-radius: 10px; }
+.import-list { display: grid; gap: 8px; }
+.import-list article { padding: 13px; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; background: #fbfdfc; border: 1px solid var(--line); border-radius: 12px; }
+.import-list article > div:first-child { display: grid; gap: 4px; }
+.import-list strong { color: var(--green-950); font-size: 14px; }
+.import-list span:not(.status-badge), .import-list small { color: var(--muted); font-size: 12px; }
+.nested-panel { margin-top: 14px; padding: 16px; background: #f8fbfa; border: 1px solid var(--line); border-radius: 13px; }
+.nested-panel h3 { margin: 0 0 10px; color: var(--green-950); font-size: 16px; }
 
 @media (max-width: 780px) {
   .auth-layout { grid-template-columns: 1fr; }
@@ -241,4 +254,5 @@ tbody tr:hover { background: #fbfdfc; }
   .technical-summary { grid-template-columns: 1fr; }
   .router-health { grid-template-columns: 1fr; }
   .router-filters { grid-template-columns: 1fr; }
+  .import-toolbar, .import-list article { grid-template-columns: 1fr; }
 }

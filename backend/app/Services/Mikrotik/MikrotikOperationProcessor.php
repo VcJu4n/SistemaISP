@@ -44,16 +44,25 @@ class MikrotikOperationProcessor
     {
         $maxAttempts = (int) config('mikrotik.operations.max_attempts', 3);
         $batchSize = $limit ?? (int) config('mikrotik.operations.batch_size', 20);
+        $staleProcessingBefore = now()->subMinutes((int) config('mikrotik.operations.stale_processing_minutes', 10));
 
         return MikrotikOperation::query()
             ->with(['service.client.zone', 'service.plan', 'service.mikrotikRouter'])
             ->where('attempts', '<', $maxAttempts)
-            ->where(function ($query) use ($retryFailed): void {
+            ->where(function ($query) use ($retryFailed, $staleProcessingBefore): void {
                 $query->where('status', MikrotikOperation::STATUS_PENDING);
 
                 if ($retryFailed) {
                     $query->orWhere('status', MikrotikOperation::STATUS_FAILED);
                 }
+
+                $query->orWhere(function ($query) use ($staleProcessingBefore): void {
+                    $query->where('status', MikrotikOperation::STATUS_PROCESSING)
+                        ->where(function ($query) use ($staleProcessingBefore): void {
+                            $query->whereNull('last_attempt_at')
+                                ->orWhere('last_attempt_at', '<=', $staleProcessingBefore);
+                        });
+                });
             })
             ->oldest('id')
             ->limit($batchSize)
@@ -84,7 +93,21 @@ class MikrotikOperationProcessor
             return true;
         }
 
-        return $retryFailed && $operation->status === MikrotikOperation::STATUS_FAILED;
+        if ($retryFailed && $operation->status === MikrotikOperation::STATUS_FAILED) {
+            return true;
+        }
+
+        return $operation->status === MikrotikOperation::STATUS_PROCESSING
+            && $this->isStaleProcessing($operation);
+    }
+
+    private function isStaleProcessing(MikrotikOperation $operation): bool
+    {
+        if ($operation->last_attempt_at === null) {
+            return true;
+        }
+
+        return $operation->last_attempt_at->lte(now()->subMinutes((int) config('mikrotik.operations.stale_processing_minutes', 10)));
     }
 
     private function errorMessage(Throwable $exception): string

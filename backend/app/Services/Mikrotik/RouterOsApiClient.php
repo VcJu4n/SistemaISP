@@ -54,6 +54,28 @@ class RouterOsApiClient
         return $id;
     }
 
+    /**
+     * @param  list<string>  $proplist
+     * @return list<array<string, string>>
+     */
+    public function read(MikrotikRouter $router, string $path, array $proplist = []): array
+    {
+        $rows = [];
+
+        $this->withAuthenticatedConnection($router, function () use ($path, $proplist, &$rows): void {
+            $sentence = ["{$path}/print"];
+
+            if ($proplist !== []) {
+                $sentence[] = '=.proplist='.implode(',', $proplist);
+            }
+
+            $this->writeSentence($sentence);
+            $rows = $this->readRowsReply();
+        });
+
+        return $rows;
+    }
+
     private function withAuthenticatedConnection(MikrotikRouter $router, callable $callback): void
     {
         $this->connect($router);

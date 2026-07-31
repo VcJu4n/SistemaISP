@@ -55,4 +55,9 @@ class MikrotikRouter extends Model
     {
         return $this->hasMany(MikrotikOperation::class, 'mikrotik_router_id');
     }
+
+    public function importCandidates(): HasMany
+    {
+        return $this->hasMany(MikrotikImportCandidate::class, 'mikrotik_router_id');
+    }
 }

@@ -1,4 +1,4 @@
-import { CheckCircle2, Pencil, Plus, Router, Search, ShieldCheck, TestTube2, X, XCircle } from 'lucide-react'
+import { Ban, CheckCircle2, Download, Link2, Pencil, Plus, Radar, Router, Search, ShieldCheck, TestTube2, UserPlus, X, XCircle } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { api, getApiError } from '../lib/api'
 
@@ -20,6 +20,12 @@ type MikrotikRouter = {
 }
 
 type Meta = { current_page: number; last_page: number; total: number }
+type SourceType = 'pppoe' | 'simple_queue' | 'dhcp_mac' | 'hotspot'
+type CandidateStatus = 'unlinked' | 'linked' | 'ignored'
+type MikrotikCandidate = { id: number; source_type: SourceType; identifier: string; display_name: string | null; ip_address: string | null; mac_address: string | null; profile: string | null; rate_limit: string | null; status: CandidateStatus; last_seen_at: string; client?: { id: number; full_name: string } | null; internet_service?: { id: number; plan?: { id: number; name: string } | null } | null }
+type ClientOption = { id: number; full_name: string; document: string; zone_id: number; internet_service_exists?: boolean; zone: { id: number; name: string } }
+type ZoneOption = { id: number; name: string; active: boolean }
+type PlanOption = { id: number; name: string; active: boolean; zones: ZoneOption[] }
 
 const statusLabels: Record<ConnectionStatus, string> = {
   pending: 'Pendiente',
@@ -40,6 +46,8 @@ export function MikrotikRoutersPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [testingId, setTestingId] = useState<number | null>(null)
+  const [detectingId, setDetectingId] = useState<number | null>(null)
+  const [importRouter, setImportRouter] = useState<MikrotikRouter | null>(null)
 
   useEffect(() => {
     const timer = setTimeout(() => { setDebounced(search); setPage(1) }, 300)
@@ -92,6 +100,23 @@ export function MikrotikRoutersPage() {
       setError(getApiError(requestError))
     } finally {
       setTestingId(null)
+      await load()
+    }
+  }
+
+  const detectControlMethod = async (router: MikrotikRouter) => {
+    setDetectingId(router.id)
+    setMessage('')
+    setError('')
+
+    try {
+      const response = await api.post<{ data: { primary_method: string; counts: Record<string, number> } }>('/mikrotik-routers/' + router.id + '/detect-control-method')
+      const counts = response.data.data.counts
+      setMessage(`Metodo principal: ${sourceLabel(response.data.data.primary_method)}. PPPoE ${counts.pppoe ?? 0}, Queue ${counts.simple_queue ?? 0}, DHCP ${counts.dhcp_mac ?? 0}, Hotspot ${counts.hotspot ?? 0}.`)
+    } catch (requestError) {
+      setError(getApiError(requestError))
+    } finally {
+      setDetectingId(null)
       await load()
     }
   }
@@ -195,6 +220,12 @@ export function MikrotikRoutersPage() {
                         <button title="Probar conexion" disabled={testingId === router.id} onClick={() => void testConnection(router)}>
                           <TestTube2 size={17} />
                         </button>
+                        <button title="Detectar metodo" disabled={detectingId === router.id} onClick={() => void detectControlMethod(router)}>
+                          <Radar size={17} />
+                        </button>
+                        <button title="Importar clientes" onClick={() => setImportRouter(router)}>
+                          <Download size={17} />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -219,8 +250,135 @@ export function MikrotikRoutersPage() {
           onSaved={saved}
         />
       )}
+      {importRouter && <MikrotikImportModal router={importRouter} onClose={() => setImportRouter(null)} />}
     </section>
   )
+}
+
+function MikrotikImportModal({ router, onClose }: { router: MikrotikRouter; onClose: () => void }) {
+  const [candidates, setCandidates] = useState<MikrotikCandidate[]>([])
+  const [clients, setClients] = useState<ClientOption[]>([])
+  const [zones, setZones] = useState<ZoneOption[]>([])
+  const [plans, setPlans] = useState<PlanOption[]>([])
+  const [status, setStatus] = useState('')
+  const [source, setSource] = useState('')
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
+  const [linking, setLinking] = useState<MikrotikCandidate | null>(null)
+  const [creating, setCreating] = useState<MikrotikCandidate | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [candidateResponse, clientResponse, zoneResponse, planResponse] = await Promise.all([
+        api.get<{ data: MikrotikCandidate[] }>('/mikrotik-routers/' + router.id + '/import-candidates', { params: { all: 1, status: status || undefined, source_type: source || undefined } }),
+        api.get<{ data: ClientOption[] }>('/clients', { params: { all: 1, status: 'active' } }),
+        api.get<{ data: ZoneOption[] }>('/zones', { params: { all: 1 } }),
+        api.get<{ data: PlanOption[] }>('/plans', { params: { all: 1, active: 1 } }),
+      ])
+      setCandidates(candidateResponse.data.data)
+      setClients(clientResponse.data.data)
+      setZones(zoneResponse.data.data)
+      setPlans(planResponse.data.data)
+    } finally {
+      setLoading(false)
+    }
+  }, [router.id, source, status])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load()
+  }, [load])
+
+  const sync = async () => {
+    setSyncing(true)
+    setError('')
+    setMessage('')
+    try {
+      const response = await api.post<{ data: { synced: number } }>('/mikrotik-routers/' + router.id + '/import-candidates/sync')
+      setMessage(`${response.data.data.synced} registros leidos desde MikroTik.`)
+      await load()
+    } catch (requestError) {
+      setError(getApiError(requestError))
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const ignore = async (candidate: MikrotikCandidate) => {
+    setError('')
+    setMessage('')
+    try {
+      await api.post('/mikrotik-import-candidates/' + candidate.id + '/ignore')
+      setMessage('Registro ignorado correctamente.')
+      await load()
+    } catch (requestError) {
+      setError(getApiError(requestError))
+    }
+  }
+
+  return <div className="modal-backdrop"><section className="modal-card modal-wide import-modal"><header><div><span className="eyebrow">HU-031</span><h2>Importar desde {router.name}</h2></div><button className="modal-close" onClick={onClose}><X /></button></header>{message && <div className="alert alert-success">{message}</div>}{error && <div className="alert alert-error">{error}</div>}<div className="import-toolbar"><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="">Todos</option><option value="unlinked">Sin relacionar</option><option value="linked">Vinculados</option><option value="ignored">Ignorados</option></select><select value={source} onChange={(event) => setSource(event.target.value)}><option value="">Todos los origenes</option><option value="pppoe">PPPoE</option><option value="simple_queue">Simple Queue</option><option value="dhcp_mac">DHCP/MAC</option><option value="hotspot">Hotspot</option></select><button className="button button-primary button-fit" disabled={syncing} onClick={() => void sync()}><Download size={17} /> {syncing ? 'Leyendo...' : 'Leer MikroTik'}</button></div>{loading ? <div className="table-message">Cargando registros...</div> : <div className="import-list">{candidates.length ? candidates.map((candidate) => <article key={candidate.id}><div><strong>{candidate.display_name || candidate.identifier}</strong><span>{sourceLabel(candidate.source_type)} - {candidate.identifier}</span><small>{candidate.ip_address || candidate.mac_address || candidate.profile || 'Sin dato tecnico adicional'}</small>{candidate.client && <small>Vinculado a {candidate.client.full_name}</small>}</div><span className={`status-badge ${candidate.status}`}>{candidateStatusLabel(candidate.status)}</span><div className="row-actions"><button title="Vincular" disabled={candidate.status === 'ignored'} onClick={() => setLinking(candidate)}><Link2 size={17} /></button><button title="Crear cliente" disabled={candidate.status === 'ignored'} onClick={() => setCreating(candidate)}><UserPlus size={17} /></button><button className="danger" title="Ignorar" onClick={() => void ignore(candidate)}><Ban size={17} /></button></div></article>) : <div className="table-message"><Download /><strong>No hay registros leidos</strong></div>}</div>}{linking && <LinkCandidateModal candidate={linking} clients={clients} plans={plans} onClose={() => setLinking(null)} onSaved={async () => { setLinking(null); setMessage('Registro vinculado correctamente.'); await load() }} onError={setError} />}{creating && <CreateCandidateClientModal candidate={creating} zones={zones.filter((zone) => zone.active)} plans={plans} onClose={() => setCreating(null)} onSaved={async () => { setCreating(null); setMessage('Cliente importado correctamente.'); await load() }} onError={setError} />}</section></div>
+}
+
+function LinkCandidateModal({ candidate, clients, plans, onClose, onSaved, onError }: { candidate: MikrotikCandidate; clients: ClientOption[]; plans: PlanOption[]; onClose: () => void; onSaved: () => Promise<void>; onError: (message: string) => void }) {
+  const [clientId, setClientId] = useState('')
+  const [planId, setPlanId] = useState('')
+  const [saving, setSaving] = useState(false)
+  const client = clients.find((item) => item.id === Number(clientId))
+  const needsPlan = serviceImportable(candidate) && client?.internet_service_exists === false
+  const availablePlans = needsPlan && client ? plans.filter((plan) => plan.zones.some((zone) => zone.id === client.zone_id)) : []
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setSaving(true)
+    try {
+      await api.post('/mikrotik-import-candidates/' + candidate.id + '/link', { client_id: Number(clientId), plan_id: planId ? Number(planId) : undefined })
+      await onSaved()
+    } catch (requestError) {
+      onError(getApiError(requestError))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return <div className="nested-panel"><h3>Vincular registro</h3><form onSubmit={submit}><label className="field"><span>Cliente existente *</span><select required value={clientId} onChange={(event) => { setClientId(event.target.value); setPlanId('') }}><option value="">Selecciona cliente</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.full_name} - {client.document}</option>)}</select></label>{serviceImportable(candidate) && client?.internet_service_exists && <div className="alert alert-success">Se usara el servicio existente del cliente.</div>}{needsPlan && <label className="field"><span>Plan para crear servicio *</span><select required value={planId} onChange={(event) => setPlanId(event.target.value)}><option value="">Selecciona plan</option>{availablePlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name}</option>)}</select></label>}<footer className="form-actions"><button type="button" className="button button-secondary" onClick={onClose}>Cancelar</button><button className="button button-primary button-fit" disabled={saving}>{saving ? 'Vinculando...' : 'Vincular'}</button></footer></form></div>
+}
+
+function CreateCandidateClientModal({ candidate, zones, plans, onClose, onSaved, onError }: { candidate: MikrotikCandidate; zones: ZoneOption[]; plans: PlanOption[]; onClose: () => void; onSaved: () => Promise<void>; onError: (message: string) => void }) {
+  const [form, setForm] = useState({ full_name: candidate.display_name || candidate.identifier, document: '', phone: '', email: '', address: '', zone_id: '', plan_id: '' })
+  const [saving, setSaving] = useState(false)
+  const availablePlans = serviceImportable(candidate) && form.zone_id ? plans.filter((plan) => plan.zones.some((zone) => zone.id === Number(form.zone_id))) : []
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setSaving(true)
+    try {
+      await api.post('/mikrotik-import-candidates/' + candidate.id + '/create-client', { ...form, email: form.email || null, address: form.address || null, zone_id: Number(form.zone_id), plan_id: form.plan_id ? Number(form.plan_id) : undefined })
+      await onSaved()
+    } catch (requestError) {
+      onError(getApiError(requestError))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return <div className="nested-panel"><h3>Crear cliente desde MikroTik</h3><form className="client-form" onSubmit={submit}><label className="field"><span>Nombre *</span><input required maxLength={150} value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} /></label><label className="field"><span>Documento *</span><input required maxLength={30} value={form.document} onChange={(event) => setForm({ ...form, document: event.target.value })} /></label><label className="field"><span>Telefono *</span><input required maxLength={30} value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label><label className="field"><span>Zona *</span><select required value={form.zone_id} onChange={(event) => setForm({ ...form, zone_id: event.target.value, plan_id: '' })}><option value="">Selecciona zona</option>{zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select></label>{serviceImportable(candidate) && <label className="field full"><span>Plan para el servicio importado *</span><select required value={form.plan_id} onChange={(event) => setForm({ ...form, plan_id: event.target.value })}><option value="">Selecciona plan</option>{availablePlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name}</option>)}</select></label>}<label className="field"><span>Correo</span><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></label><label className="field"><span>Direccion</span><input maxLength={500} value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} /></label><footer className="form-actions full"><button type="button" className="button button-secondary" onClick={onClose}>Cancelar</button><button className="button button-primary button-fit" disabled={saving}>{saving ? 'Creando...' : 'Crear cliente'}</button></footer></form></div>
+}
+
+function serviceImportable(candidate: MikrotikCandidate): boolean {
+  return candidate.source_type === 'pppoe' || candidate.source_type === 'simple_queue'
+}
+
+function sourceLabel(source: string): string {
+  const labels: Record<string, string> = { pppoe: 'PPPoE', simple_queue: 'Simple Queue', dhcp_mac: 'DHCP/MAC', hotspot: 'Hotspot', manual: 'Manual' }
+  return labels[source] ?? source
+}
+
+function candidateStatusLabel(status: CandidateStatus): string {
+  const labels: Record<CandidateStatus, string> = { unlinked: 'Sin relacionar', linked: 'Vinculado', ignored: 'Ignorado' }
+  return labels[status]
 }
 
 function MikrotikRouterModal({ router, onClose, onSaved }: { router: MikrotikRouter | null; onClose: () => void; onSaved: (text: string) => Promise<void> }) {

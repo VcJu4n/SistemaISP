@@ -80,6 +80,44 @@ class MikrotikOperationProcessingTest extends TestCase
         $this->assertSame(MikrotikOperation::STATUS_FAILED, $exhausted->fresh()->status);
     }
 
+    public function test_stale_processing_operations_are_reclaimed(): void
+    {
+        config(['mikrotik.operations.stale_processing_minutes' => 10]);
+
+        $operation = MikrotikOperation::factory()->create([
+            'status' => MikrotikOperation::STATUS_PROCESSING,
+            'attempts' => 1,
+            'last_attempt_at' => now()->subMinutes(15),
+        ]);
+
+        $this->app->bind(MikrotikOperationExecutor::class, SuccessfulExecutor::class);
+
+        $summary = $this->app->make(MikrotikOperationProcessor::class)->process();
+
+        $this->assertSame(['processed' => 1, 'synced' => 1, 'failed' => 0, 'skipped' => 0], $summary);
+        $this->assertSame(MikrotikOperation::STATUS_SYNCED, $operation->fresh()->status);
+        $this->assertSame(2, $operation->fresh()->attempts);
+    }
+
+    public function test_fresh_processing_operations_are_not_reclaimed(): void
+    {
+        config(['mikrotik.operations.stale_processing_minutes' => 10]);
+
+        $operation = MikrotikOperation::factory()->create([
+            'status' => MikrotikOperation::STATUS_PROCESSING,
+            'attempts' => 1,
+            'last_attempt_at' => now()->subMinutes(2),
+        ]);
+
+        $this->app->bind(MikrotikOperationExecutor::class, SuccessfulExecutor::class);
+
+        $summary = $this->app->make(MikrotikOperationProcessor::class)->process();
+
+        $this->assertSame(['processed' => 0, 'synced' => 0, 'failed' => 0, 'skipped' => 0], $summary);
+        $this->assertSame(MikrotikOperation::STATUS_PROCESSING, $operation->fresh()->status);
+        $this->assertSame(1, $operation->fresh()->attempts);
+    }
+
     public function test_command_processes_pending_operations(): void
     {
         MikrotikOperation::factory()->count(2)->create();
