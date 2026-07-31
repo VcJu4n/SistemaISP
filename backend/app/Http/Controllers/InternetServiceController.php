@@ -8,6 +8,7 @@ use App\Http\Requests\SuspendServiceRequest;
 use App\Http\Requests\UpdateServiceTechnicalConfigRequest;
 use App\Models\Client;
 use App\Models\InternetService;
+use App\Models\MikrotikOperation;
 use App\Models\Plan;
 use App\Services\MikrotikOperationRecorder;
 use Illuminate\Database\Eloquent\Builder;
@@ -66,7 +67,7 @@ class InternetServiceController extends Controller
 
         $data = StoreInternetServiceRequest::normalizeTechnicalConfig($data);
 
-        $service = DB::transaction(function () use ($data, $client, $plan): InternetService {
+        $service = DB::transaction(function () use ($data, $plan): InternetService {
             $service = InternetService::query()->create([...$data, 'status' => 'active']);
             $service->histories()->create([
                 'event_type' => 'created',
@@ -75,6 +76,7 @@ class InternetServiceController extends Controller
                 'occurred_at' => now(),
             ]);
             $this->mikrotikOperations->createAccess($service);
+
             return $service;
         });
 
@@ -199,6 +201,40 @@ class InternetServiceController extends Controller
         return response()->json(['message' => 'Configuracion tecnica actualizada correctamente.', 'data' => $this->loadService($service)]);
     }
 
+    public function syncMikrotik(InternetService $service): JsonResponse
+    {
+        if (! $service->requiresMikrotikSync()) {
+            throw ValidationException::withMessages(['service' => ['El servicio no tiene una configuración MikroTik completa.']]);
+        }
+
+        $operation = $service->status === 'suspended'
+            ? $this->mikrotikOperations->suspend($service, ['manual' => true])
+            : $this->mikrotikOperations->reactivate($service);
+
+        return response()->json([
+            'message' => 'Sincronización MikroTik agregada a la cola.',
+            'data' => $operation,
+        ], 201);
+    }
+
+    public function retryMikrotikOperation(InternetService $service, MikrotikOperation $operation): JsonResponse
+    {
+        if ($operation->internet_service_id !== $service->id) {
+            abort(404);
+        }
+
+        if ($operation->status !== MikrotikOperation::STATUS_FAILED) {
+            throw ValidationException::withMessages(['operation' => ['Solo se pueden reintentar operaciones fallidas.']]);
+        }
+
+        $operation->retry();
+
+        return response()->json([
+            'message' => 'Operación MikroTik preparada para reintento.',
+            'data' => $operation->fresh(),
+        ]);
+    }
+
     private function validatePlanForClient(Plan $plan, Client $client): void
     {
         if (! $plan->active) {
@@ -216,8 +252,13 @@ class InternetServiceController extends Controller
             'plan:id,name,download_mbps,upload_mbps,monthly_price,active',
             'mikrotikRouter:id,name,connection_status,active',
         ];
-        if ($withHistory) $relations[] = 'histories';
-        if ($withHistory) $relations[] = 'mikrotikOperations.router:id,name,connection_status,active';
+        if ($withHistory) {
+            $relations[] = 'histories';
+        }
+        if ($withHistory) {
+            $relations[] = 'mikrotikOperations.router:id,name,connection_status,active';
+        }
+
         return $service->fresh()->load($relations);
     }
 

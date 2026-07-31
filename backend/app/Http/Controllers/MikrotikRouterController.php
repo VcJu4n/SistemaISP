@@ -6,6 +6,7 @@ use App\Contracts\MikrotikRouterConnectionTester;
 use App\Http\Requests\StoreMikrotikRouterRequest;
 use App\Http\Requests\UpdateMikrotikRouterRequest;
 use App\Models\MikrotikRouter;
+use App\Services\Mikrotik\RouterOsApiClient;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -103,6 +104,18 @@ class MikrotikRouterController extends Controller
             'message' => $result->connected ? 'Conexion con MikroTik correcta.' : 'No se pudo conectar con MikroTik.',
             'data' => $mikrotikRouter->fresh(),
         ], $result->connected ? 200 : 422);
+    }
+
+    public function pppoeProfiles(MikrotikRouter $mikrotikRouter, RouterOsApiClient $client): JsonResponse
+    {
+        $profiles = collect($client->read($mikrotikRouter, '/ppp/profile', ['name']))
+            ->pluck('name')
+            ->filter(fn ($name) => is_string($name) && $name !== '')
+            ->unique()
+            ->sort()
+            ->values();
+
+        return response()->json(['data' => $profiles]);
     }
 
     private function connectionSettingsChanged(MikrotikRouter $router, array $data): bool

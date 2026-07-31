@@ -296,17 +296,60 @@ class InternetServiceTest extends TestCase
         $this->getJson("/api/services/{$service->id}")->assertOk()->assertJsonCount(1, 'data.histories');
     }
 
+    public function test_failed_mikrotik_operation_can_be_manually_retried(): void
+    {
+        $service = $this->service([
+            'mikrotik_router_id' => MikrotikRouter::factory(),
+            'mikrotik_control_method' => 'pppoe',
+            'pppoe_username' => 'cliente',
+            'pppoe_password' => 'secret',
+            'pppoe_profile' => 'plan-10m',
+        ]);
+        $operation = MikrotikOperation::factory()->create([
+            'internet_service_id' => $service->id,
+            'mikrotik_router_id' => $service->mikrotik_router_id,
+            'status' => MikrotikOperation::STATUS_FAILED,
+            'attempts' => 3,
+            'last_error' => 'Router desconectado',
+        ]);
+
+        $this->postJson("/api/services/{$service->id}/mikrotik-operations/{$operation->id}/retry")
+            ->assertOk()
+            ->assertJsonPath('data.status', MikrotikOperation::STATUS_PENDING)
+            ->assertJsonPath('data.attempts', 0)
+            ->assertJsonPath('data.last_error', null);
+    }
+
+    public function test_manual_mikrotik_sync_queues_action_matching_service_status(): void
+    {
+        $service = $this->service([
+            'status' => 'suspended',
+            'mikrotik_router_id' => MikrotikRouter::factory(),
+            'mikrotik_control_method' => 'pppoe',
+            'pppoe_username' => 'cliente',
+            'pppoe_password' => 'secret',
+            'pppoe_profile' => 'plan-10m',
+        ]);
+
+        $this->postJson("/api/services/{$service->id}/mikrotik/sync")
+            ->assertCreated()
+            ->assertJsonPath('data.action', MikrotikOperation::ACTION_SUSPEND)
+            ->assertJsonPath('data.status', MikrotikOperation::STATUS_PENDING);
+    }
+
     private function clientAndPlan(): array
     {
         $client = Client::factory()->create();
         $plan = Plan::factory()->create(['active' => true]);
         $plan->zones()->attach($client->zone_id);
+
         return [$client, $plan];
     }
 
     private function service(array $attributes = []): InternetService
     {
         [$client, $plan] = $this->clientAndPlan();
+
         return InternetService::factory()->create([...$attributes, 'client_id' => $client, 'plan_id' => $plan]);
     }
 }
