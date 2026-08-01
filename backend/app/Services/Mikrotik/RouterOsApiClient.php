@@ -34,6 +34,17 @@ class RouterOsApiClient
 
     public function findOneId(MikrotikRouter $router, string $path, string $field, string $value): string
     {
+        $id = $this->findOneIdOrNull($router, $path, $field, $value);
+
+        if ($id === null) {
+            throw new RuntimeException("No se encontro el registro RouterOS [{$path}] con {$field}={$value}.");
+        }
+
+        return $id;
+    }
+
+    public function findOneIdOrNull(MikrotikRouter $router, string $path, string $field, string $value): ?string
+    {
         $rows = [];
 
         $this->withAuthenticatedConnection($router, function () use ($path, $field, $value, &$rows): void {
@@ -47,11 +58,7 @@ class RouterOsApiClient
 
         $id = $rows[0]['.id'] ?? null;
 
-        if (! is_string($id) || $id === '') {
-            throw new RuntimeException("No se encontro el registro RouterOS [{$path}] con {$field}={$value}.");
-        }
-
-        return $id;
+        return is_string($id) && $id !== '' ? $id : null;
     }
 
     /**
@@ -267,6 +274,7 @@ class RouterOsApiClient
 
             if ($type === '!re') {
                 $rows[] = $attributes;
+
                 continue;
             }
 

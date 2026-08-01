@@ -26,11 +26,34 @@ class RouterOsMikrotikOperationExecutor implements MikrotikOperationExecutor
 
         match ($operation->action) {
             MikrotikOperation::ACTION_CREATE_ACCESS => $this->client->executeCommand($service->mikrotikRouter, $this->createAccessCommand($service)),
-            MikrotikOperation::ACTION_SUSPEND => $this->client->executeCommand($service->mikrotikRouter, $this->suspendCommand($service)),
+            MikrotikOperation::ACTION_SUSPEND => $this->suspend($service),
             MikrotikOperation::ACTION_REACTIVATE => $this->client->executeCommand($service->mikrotikRouter, $this->reactivateCommand($service)),
             MikrotikOperation::ACTION_CHANGE_PLAN => $this->client->executeCommand($service->mikrotikRouter, $this->changePlanCommand($service)),
             default => throw new RuntimeException("La accion MikroTik [{$operation->action}] no esta soportada."),
         };
+    }
+
+    private function suspend(InternetService $service): void
+    {
+        $this->client->executeCommand($service->mikrotikRouter, $this->suspendCommand($service));
+
+        if ($service->mikrotik_control_method !== 'pppoe' || ! $service->pppoe_username) {
+            return;
+        }
+
+        $activeId = $this->client->findOneIdOrNull(
+            $service->mikrotikRouter,
+            '/ppp/active',
+            'name',
+            $service->pppoe_username
+        );
+
+        if ($activeId !== null) {
+            $this->client->executeCommand($service->mikrotikRouter, [
+                '/ppp/active/remove',
+                '=.id='.$activeId,
+            ]);
+        }
     }
 
     /**

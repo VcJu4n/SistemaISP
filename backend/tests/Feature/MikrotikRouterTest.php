@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Contracts\MikrotikRouterConnectionTester;
 use App\Models\MikrotikRouter;
 use App\Models\User;
+use App\Services\Mikrotik\RouterOsApiClient;
 use App\ValueObjects\MikrotikConnectionResult;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -117,6 +118,17 @@ class MikrotikRouterTest extends TestCase
             ->assertJsonValidationErrors(['name', 'ip_address']);
     }
 
+    public function test_pppoe_profiles_can_be_read_from_router(): void
+    {
+        $router = MikrotikRouter::factory()->create();
+        $client = new ProfileRouterOsApiClient;
+        $this->app->instance(RouterOsApiClient::class, $client);
+
+        $this->getJson("/api/mikrotik-routers/{$router->id}/pppoe-profiles")
+            ->assertOk()
+            ->assertExactJson(['data' => ['default', 'plan-30m']]);
+    }
+
     private function routerPayload(): array
     {
         return [
@@ -143,5 +155,17 @@ class FailingRouterTester implements MikrotikRouterConnectionTester
     public function test(MikrotikRouter $router): MikrotikConnectionResult
     {
         return MikrotikConnectionResult::disconnected('No route to host');
+    }
+}
+
+class ProfileRouterOsApiClient extends RouterOsApiClient
+{
+    public function read(MikrotikRouter $router, string $path, array $proplist = []): array
+    {
+        return [
+            ['name' => 'plan-30m'],
+            ['name' => 'default'],
+            ['name' => 'plan-30m'],
+        ];
     }
 }

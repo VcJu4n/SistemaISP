@@ -2,23 +2,30 @@
 
 namespace App\Models;
 
+use Database\Factories\MikrotikOperationFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class MikrotikOperation extends Model
 {
-    /** @use HasFactory<\Database\Factories\MikrotikOperationFactory> */
+    /** @use HasFactory<MikrotikOperationFactory> */
     use HasFactory;
 
     public const ACTION_CREATE_ACCESS = 'create_access';
+
     public const ACTION_SUSPEND = 'suspend';
+
     public const ACTION_REACTIVATE = 'reactivate';
+
     public const ACTION_CHANGE_PLAN = 'change_plan';
 
     public const STATUS_PENDING = 'pending';
+
     public const STATUS_PROCESSING = 'processing';
+
     public const STATUS_SYNCED = 'synced';
+
     public const STATUS_FAILED = 'failed';
 
     public const ACTIONS = [
@@ -100,7 +107,9 @@ class MikrotikOperation extends Model
     {
         $this->update([
             'status' => self::STATUS_PENDING,
+            'attempts' => 0,
             'last_error' => null,
+            'last_attempt_at' => null,
             'synced_at' => null,
         ]);
     }

@@ -146,7 +146,7 @@ class MikrotikOperationProcessingTest extends TestCase
             'mikrotik_router_id' => $router->id,
             'action' => MikrotikOperation::ACTION_CREATE_ACCESS,
         ]);
-        $client = new RecordingRouterOsApiClient();
+        $client = new RecordingRouterOsApiClient;
 
         (new RouterOsMikrotikOperationExecutor($client))->execute($operation);
 
@@ -175,7 +175,7 @@ class MikrotikOperationProcessingTest extends TestCase
             'mikrotik_router_id' => $router->id,
             'action' => MikrotikOperation::ACTION_CREATE_ACCESS,
         ]);
-        $client = new RecordingRouterOsApiClient();
+        $client = new RecordingRouterOsApiClient;
 
         (new RouterOsMikrotikOperationExecutor($client))->execute($operation);
 
@@ -199,7 +199,7 @@ class MikrotikOperationProcessingTest extends TestCase
             'pppoe_password' => 'cliente-secret',
             'pppoe_profile' => 'plan-30m',
         ]);
-        $client = new RecordingRouterOsApiClient();
+        $client = new RecordingRouterOsApiClient;
         $client->ids['/ppp/secret|name|juan.perez'] = '*ppp1';
 
         (new RouterOsMikrotikOperationExecutor($client))->execute(MikrotikOperation::factory()->create([
@@ -228,6 +228,32 @@ class MikrotikOperationProcessingTest extends TestCase
         ], $client->commands[1]);
     }
 
+    public function test_routeros_executor_disconnects_active_pppoe_session_when_suspending(): void
+    {
+        $router = MikrotikRouter::factory()->create();
+        $service = InternetService::factory()->create([
+            'mikrotik_router_id' => $router->id,
+            'mikrotik_control_method' => 'pppoe',
+            'pppoe_username' => 'cliente.activo',
+            'pppoe_password' => 'cliente-secret',
+            'pppoe_profile' => 'plan-30m',
+        ]);
+        $client = new RecordingRouterOsApiClient;
+        $client->ids['/ppp/secret|name|cliente.activo'] = '*secret1';
+        $client->ids['/ppp/active|name|cliente.activo'] = '*active1';
+
+        (new RouterOsMikrotikOperationExecutor($client))->execute(MikrotikOperation::factory()->create([
+            'internet_service_id' => $service->id,
+            'mikrotik_router_id' => $router->id,
+            'action' => MikrotikOperation::ACTION_SUSPEND,
+        ]));
+
+        $this->assertSame([
+            '/ppp/active/remove',
+            '=.id=*active1',
+        ], $client->commands[1]);
+    }
+
     public function test_routeros_executor_suspends_and_reactivates_simple_queue(): void
     {
         $router = MikrotikRouter::factory()->create();
@@ -237,7 +263,7 @@ class MikrotikOperationProcessingTest extends TestCase
             'simple_queue_name' => 'cliente-juan',
             'service_ip_address' => '192.168.10.20',
         ]);
-        $client = new RecordingRouterOsApiClient();
+        $client = new RecordingRouterOsApiClient;
         $client->ids['/queue/simple|name|cliente-juan'] = '*queue1';
 
         (new RouterOsMikrotikOperationExecutor($client))->execute(MikrotikOperation::factory()->create([
@@ -281,7 +307,7 @@ class MikrotikOperationProcessingTest extends TestCase
             'simple_queue_name' => 'cliente-maria',
             'service_ip_address' => '192.168.10.21',
         ]);
-        $client = new RecordingRouterOsApiClient();
+        $client = new RecordingRouterOsApiClient;
         $client->ids['/ppp/secret|name|maria.gomez'] = '*ppp2';
         $client->ids['/queue/simple|name|cliente-maria'] = '*queue2';
 
@@ -357,5 +383,14 @@ class RecordingRouterOsApiClient extends RouterOsApiClient
         $this->lookups[] = $key;
 
         return $this->ids[$key] ?? '*1';
+    }
+
+    public function findOneIdOrNull(MikrotikRouter $router, string $path, string $field, string $value): ?string
+    {
+        $this->router = $router;
+        $key = "{$path}|{$field}|{$value}";
+        $this->lookups[] = $key;
+
+        return $this->ids[$key] ?? null;
     }
 }
