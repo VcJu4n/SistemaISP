@@ -9,6 +9,7 @@ type PaymentMethod = 'cash' | 'transfer' | 'other'
 type Zone = { id: number; name: string; active: boolean }
 type Plan = { id: number; name: string; monthly_price: string | null; download_mbps?: number; upload_mbps?: number; active?: boolean }
 type ServiceHistory = { id: number; event_type: string; description: string; metadata: Record<string, unknown> | null; occurred_at: string; user?: { id: number; name: string } | null }
+type NotificationLog = { id: number; type: string; channel: string; phone: string; message: string; sent_at: string; template?: { id: number; key: string; name: string } | null; user?: { id: number; name: string } | null }
 type InternetService = { id: number; client_id: number; plan_id: number; status: ServiceStatus; next_due_date: string | null; suspended_at: string | null; suspension_reason: string | null; plan: Plan; histories?: ServiceHistory[] }
 type Client = {
   id: number
@@ -281,8 +282,24 @@ function ClientPaymentsTab({ client }: { client: Client }) {
 }
 
 function ClientHistoryTab({ client }: { client: Client }) {
+  const [logs, setLogs] = useState<NotificationLog[]>([])
+  const [loading, setLoading] = useState(true)
   const histories = client.internet_service?.histories ?? []
-  return <section className="modal-section"><div className="timeline">{histories.length ? histories.map((history) => <article key={history.id}><i /><div><strong>{history.description}</strong><time>{formatDateTime(history.occurred_at)} - {history.user?.name ?? 'Sistema'}</time></div></article>) : <p>Sin eventos registrados.</p>}</div></section>
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true)
+      try {
+        const response = await api.get<{ data: NotificationLog[] }>(`/clients/${client.id}/notification-logs`)
+        setLogs(response.data.data)
+      } finally {
+        setLoading(false)
+      }
+    }
+    void load()
+  }, [client.id])
+
+  return <section className="modal-section"><section className="sync-list"><h3>Notificaciones</h3>{loading ? <p>Cargando notificaciones...</p> : logs.length ? logs.map((log) => <article key={log.id}><div><strong>{log.template?.name ?? log.type}</strong><span>{formatDateTime(log.sent_at)} - {log.user?.name ?? 'Sistema'}</span><small>{log.message}</small></div><span className="status-badge active">WhatsApp</span></article>) : <p>Sin notificaciones registradas.</p>}</section><div className="timeline">{histories.length ? histories.map((history) => <article key={history.id}><i /><div><strong>{history.description}</strong><time>{formatDateTime(history.occurred_at)} - {history.user?.name ?? 'Sistema'}</time></div></article>) : <p>Sin eventos registrados.</p>}</div></section>
 }
 
 function ConfirmArchiveModal({ client, onClose, onConfirm }: { client: Client; onClose: () => void; onConfirm: () => void }) {

@@ -7,6 +7,8 @@ use App\Http\Controllers\ZoneController;
 use App\Http\Controllers\InternetServiceController;
 use App\Http\Controllers\MikrotikImportController;
 use App\Http\Controllers\MikrotikRouterController;
+use App\Http\Controllers\NoticeController;
+use App\Http\Controllers\NotificationTemplateController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ServiceDueDateController;
@@ -29,7 +31,12 @@ Route::middleware('auth:sanctum')->apiResource('mikrotik-routers', MikrotikRoute
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('dashboard/billing-summary', [ReportController::class, 'billingDashboard']);
     Route::get('clients/{client}/payments', [PaymentController::class, 'clientPayments']);
+    Route::get('clients/{client}/notification-logs', [NoticeController::class, 'clientLogs']);
     Route::apiResource('payments', PaymentController::class)->only(['index', 'store', 'show']);
+    Route::get('notices/kanban', [NoticeController::class, 'kanban']);
+    Route::get('notices/summary', [NoticeController::class, 'summary']);
+    Route::post('notices/{service}/whatsapp', [NoticeController::class, 'sendWhatsapp']);
+    Route::apiResource('notification-templates', NotificationTemplateController::class)->only(['index', 'update']);
     Route::post('mikrotik-routers/{mikrotik_router}/test-connection', [MikrotikRouterController::class, 'testConnection']);
     Route::post('mikrotik-routers/{mikrotik_router}/detect-control-method', [MikrotikImportController::class, 'detect']);
     Route::post('mikrotik-routers/{mikrotik_router}/import-candidates/sync', [MikrotikImportController::class, 'sync']);

@@ -7,6 +7,7 @@ import { LoginPage } from './pages/LoginPage'
 import { ClientsPage } from './pages/ClientsPage'
 import { CatalogsPage } from './pages/CatalogsPage'
 import { MikrotikRoutersPage } from './pages/MikrotikRoutersPage'
+import { NoticesPage } from './pages/NoticesPage'
 import { PaymentsPage } from './pages/PaymentsPage'
 import { ServicesPage } from './pages/ServicesPage'
 import { useAuth } from './auth/useAuth'
@@ -27,6 +28,7 @@ function App() {
           <Route path="/catalogos" element={<CatalogsPage />} />
           <Route path="/servicios" element={<ServicesPage />} />
           <Route path="/pagos" element={<PaymentsPage />} />
+          <Route path="/avisos" element={<NoticesPage />} />
           <Route path="/mikrotik" element={<MikrotikRoutersPage />} />
         </Route>
         <Route path="/cambiar-contrasena" element={<ChangePasswordPage />} />

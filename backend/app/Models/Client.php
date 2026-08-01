@@ -46,4 +46,9 @@ class Client extends Model
     {
         return $this->hasMany(Payment::class);
     }
+
+    public function notificationLogs(): HasMany
+    {
+        return $this->hasMany(NotificationLog::class);
+    }
 }

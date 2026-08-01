@@ -40,6 +40,7 @@ class InternetService extends Model
     public function histories(): HasMany { return $this->hasMany(ServiceHistory::class)->latest('occurred_at'); }
     public function mikrotikOperations(): HasMany { return $this->hasMany(MikrotikOperation::class); }
     public function payments(): HasMany { return $this->hasMany(Payment::class); }
+    public function notificationLogs(): HasMany { return $this->hasMany(NotificationLog::class); }
 
     public function requiresMikrotikSync(): bool
     {
