@@ -7,6 +7,9 @@ use App\Http\Controllers\ZoneController;
 use App\Http\Controllers\InternetServiceController;
 use App\Http\Controllers\MikrotikImportController;
 use App\Http\Controllers\MikrotikRouterController;
+use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\ReportController;
+use App\Http\Controllers\ServiceDueDateController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function () {
@@ -24,6 +27,9 @@ Route::middleware('auth:sanctum')->apiResource('zones', ZoneController::class)->
 Route::middleware('auth:sanctum')->apiResource('plans', PlanController::class)->except('destroy');
 Route::middleware('auth:sanctum')->apiResource('mikrotik-routers', MikrotikRouterController::class)->except('destroy');
 Route::middleware('auth:sanctum')->group(function () {
+    Route::get('dashboard/billing-summary', [ReportController::class, 'billingDashboard']);
+    Route::get('clients/{client}/payments', [PaymentController::class, 'clientPayments']);
+    Route::apiResource('payments', PaymentController::class)->only(['index', 'store', 'show']);
     Route::post('mikrotik-routers/{mikrotik_router}/test-connection', [MikrotikRouterController::class, 'testConnection']);
     Route::post('mikrotik-routers/{mikrotik_router}/detect-control-method', [MikrotikImportController::class, 'detect']);
     Route::post('mikrotik-routers/{mikrotik_router}/import-candidates/sync', [MikrotikImportController::class, 'sync']);
@@ -34,6 +40,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('services', InternetServiceController::class)->only(['index', 'store', 'show']);
     Route::post('services/{service}/suspend', [InternetServiceController::class, 'suspend']);
     Route::post('services/{service}/reactivate', [InternetServiceController::class, 'reactivate']);
+    Route::put('services/{service}/due-date', [ServiceDueDateController::class, 'update']);
     Route::put('services/{service}/plan', [InternetServiceController::class, 'changePlan']);
     Route::put('services/{service}/technical-config', [InternetServiceController::class, 'updateTechnicalConfig']);
 });

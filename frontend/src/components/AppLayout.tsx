@@ -1,4 +1,4 @@
-import { KeyRound, Layers3, LogOut, RadioTower, Router, Users, Wifi } from 'lucide-react'
+import { CreditCard, KeyRound, Layers3, LogOut, RadioTower, Router, Users, Wifi } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 
@@ -13,6 +13,7 @@ export function AppLayout() {
           <NavLink to="/clientes"><Users size={17} /> Clientes</NavLink>
           <NavLink to="/catalogos"><Layers3 size={17} /> Planes y zonas</NavLink>
           <NavLink to="/servicios"><RadioTower size={17} /> Servicios</NavLink>
+          <NavLink to="/pagos"><CreditCard size={17} /> Pagos</NavLink>
           <NavLink to="/mikrotik"><Router size={17} /> MikroTik</NavLink>
           <NavLink to="/cambiar-contrasena"><KeyRound size={17} /> Contrasena</NavLink>
         </nav>

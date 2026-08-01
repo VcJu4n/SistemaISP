@@ -10,6 +10,7 @@ use App\Models\Client;
 use App\Models\InternetService;
 use App\Models\Plan;
 use App\Services\MikrotikOperationRecorder;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -67,11 +68,18 @@ class InternetServiceController extends Controller
         $data = StoreInternetServiceRequest::normalizeTechnicalConfig($data);
 
         $service = DB::transaction(function () use ($data, $client, $plan): InternetService {
-            $service = InternetService::query()->create([...$data, 'status' => 'active']);
+            $installationDate = ($data['installation_date'] ?? null)
+                ? CarbonImmutable::parse($data['installation_date'])
+                : CarbonImmutable::today();
+            $service = InternetService::query()->create([
+                ...$data,
+                'status' => 'active',
+                'next_due_date' => $installationDate->addMonthNoOverflow()->toDateString(),
+            ]);
             $service->histories()->create([
                 'event_type' => 'created',
                 'description' => "Servicio creado con el plan {$plan->name}.",
-                'metadata' => ['plan_id' => $plan->id, 'plan_name' => $plan->name],
+                'metadata' => ['plan_id' => $plan->id, 'plan_name' => $plan->name, 'next_due_date' => $service->next_due_date?->toDateString()],
                 'occurred_at' => now(),
             ]);
             $this->mikrotikOperations->createAccess($service);
@@ -216,7 +224,7 @@ class InternetServiceController extends Controller
             'plan:id,name,download_mbps,upload_mbps,monthly_price,active',
             'mikrotikRouter:id,name,connection_status,active',
         ];
-        if ($withHistory) $relations[] = 'histories';
+        if ($withHistory) $relations[] = 'histories.user:id,name';
         if ($withHistory) $relations[] = 'mikrotikOperations.router:id,name,connection_status,active';
         return $service->fresh()->load($relations);
     }

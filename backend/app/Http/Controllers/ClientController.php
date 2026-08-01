@@ -26,6 +26,8 @@ class ClientController extends Controller
 
         $clients = Client::query()
             ->with('zone:id,name,active')
+            ->with('internetService:id,client_id,plan_id,status,next_due_date,suspended_at,suspension_reason')
+            ->with('internetService.plan:id,name,monthly_price')
             ->withExists('internetService')
             ->when($validated['search'] ?? null, function (Builder $query, string $search): void {
                 $term = '%'.mb_strtolower($search).'%';
@@ -75,7 +77,13 @@ class ClientController extends Controller
 
     public function show(Client $client): JsonResponse
     {
-        return response()->json(['data' => $client->load('zone:id,name,active')]);
+        return response()->json([
+            'data' => $client->load([
+                'zone:id,name,active',
+                'internetService.plan:id,name,monthly_price,download_mbps,upload_mbps,active',
+                'internetService.histories.user:id,name',
+            ]),
+        ]);
     }
 
     public function update(UpdateClientRequest $request, Client $client): JsonResponse

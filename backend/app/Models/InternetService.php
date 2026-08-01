@@ -13,7 +13,7 @@ class InternetService extends Model
     use HasFactory;
 
     protected $fillable = [
-        'client_id', 'plan_id', 'status', 'installation_date', 'notes',
+        'client_id', 'plan_id', 'status', 'installation_date', 'next_due_date', 'notes',
         'mikrotik_router_id', 'mikrotik_control_method', 'pppoe_username',
         'pppoe_password', 'pppoe_profile', 'simple_queue_name', 'service_ip_address',
         'service_mac_address', 'client_antenna_ip', 'client_antenna_mac',
@@ -28,6 +28,7 @@ class InternetService extends Model
     {
         return [
             'installation_date' => 'date:Y-m-d',
+            'next_due_date' => 'date:Y-m-d',
             'suspended_at' => 'datetime',
             'pppoe_password' => 'encrypted',
         ];
@@ -38,6 +39,7 @@ class InternetService extends Model
     public function mikrotikRouter(): BelongsTo { return $this->belongsTo(MikrotikRouter::class, 'mikrotik_router_id'); }
     public function histories(): HasMany { return $this->hasMany(ServiceHistory::class)->latest('occurred_at'); }
     public function mikrotikOperations(): HasMany { return $this->hasMany(MikrotikOperation::class); }
+    public function payments(): HasMany { return $this->hasMany(Payment::class); }
 
     public function requiresMikrotikSync(): bool
     {

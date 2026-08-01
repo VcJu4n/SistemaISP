@@ -19,6 +19,7 @@ class InternetServiceFactory extends Factory
             'plan_id' => Plan::factory(),
             'status' => 'active',
             'installation_date' => fake()->date(),
+            'next_due_date' => fake()->dateTimeBetween('now', '+1 month')->format('Y-m-d'),
             'notes' => fake()->optional()->sentence(),
             'mikrotik_control_method' => 'manual',
         ];
