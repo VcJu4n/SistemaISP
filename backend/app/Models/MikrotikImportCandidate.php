@@ -75,6 +75,6 @@ class MikrotikImportCandidate extends Model
 
     public function isServiceImportable(): bool
     {
-        return in_array($this->source_type, [self::SOURCE_PPPOE, self::SOURCE_SIMPLE_QUEUE], true);
+        return in_array($this->source_type, [self::SOURCE_PPPOE, self::SOURCE_SIMPLE_QUEUE, self::SOURCE_DHCP_MAC], true);
     }
 }

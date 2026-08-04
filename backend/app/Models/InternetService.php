@@ -61,6 +61,10 @@ class InternetService extends Model
                 'ip_address' => $this->service_ip_address,
                 'max_limit' => $this->plan ? "{$this->plan->download_mbps}M/{$this->plan->upload_mbps}M" : null,
             ],
+            'ip_firewall' => [
+                'ip_address' => $this->service_ip_address,
+                'address_list' => 'sistemaisp_suspendidos',
+            ],
             'mac_address' => $this->service_mac_address,
             'antenna' => [
                 'ip' => $this->client_antenna_ip,

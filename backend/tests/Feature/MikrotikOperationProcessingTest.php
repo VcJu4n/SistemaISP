@@ -265,6 +265,53 @@ class MikrotikOperationProcessingTest extends TestCase
         ], $client->commands[1]);
     }
 
+    public function test_routeros_executor_suspends_and_reactivates_ip_firewall_service(): void
+    {
+        $router = MikrotikRouter::factory()->create();
+        $service = InternetService::factory()->create([
+            'mikrotik_router_id' => $router->id,
+            'mikrotik_control_method' => 'ip_firewall',
+            'service_ip_address' => '192.168.0.120',
+        ]);
+        $client = new RecordingRouterOsApiClient();
+        $client->ids['/ip/firewall/address-list|list=sistemaisp_suspendidos|address=192.168.0.120'] = ['*addr1'];
+
+        (new RouterOsMikrotikOperationExecutor($client))->execute(MikrotikOperation::factory()->create([
+            'internet_service_id' => $service->id,
+            'mikrotik_router_id' => $router->id,
+            'action' => MikrotikOperation::ACTION_SUSPEND,
+        ]));
+        (new RouterOsMikrotikOperationExecutor($client))->execute(MikrotikOperation::factory()->create([
+            'internet_service_id' => $service->id,
+            'mikrotik_router_id' => $router->id,
+            'action' => MikrotikOperation::ACTION_REACTIVATE,
+        ]));
+
+        $this->assertSame([
+            '/ip/firewall/address-list/remove',
+            '=.id=*addr1',
+        ], $client->commands[0]);
+        $this->assertSame([
+            '/ip/firewall/address-list/add',
+            '=list=sistemaisp_suspendidos',
+            '=address=192.168.0.120',
+            "=comment=SistemaISP servicio #{$service->id}",
+            '=disabled=no',
+        ], $client->commands[1]);
+        $this->assertSame([
+            '/ip/firewall/raw/add',
+            '=chain=prerouting',
+            '=src-address-list=sistemaisp_suspendidos',
+            '=action=drop',
+            '=comment=SistemaISP corte por mora',
+            '=disabled=no',
+        ], $client->commands[2]);
+        $this->assertSame([
+            '/ip/firewall/address-list/remove',
+            '=.id=*addr1',
+        ], $client->commands[3]);
+    }
+
     public function test_routeros_executor_changes_pppoe_profile_and_simple_queue_speed(): void
     {
         $router = MikrotikRouter::factory()->create();
@@ -337,7 +384,7 @@ class RecordingRouterOsApiClient extends RouterOsApiClient
     /** @var list<list<string>> */
     public array $commands = [];
 
-    /** @var array<string, string> */
+    /** @var array<string, string|list<string>> */
     public array $ids = [];
 
     /** @var list<string> */
@@ -345,9 +392,17 @@ class RecordingRouterOsApiClient extends RouterOsApiClient
 
     public function executeCommand(MikrotikRouter $router, array $words): void
     {
+        $this->executeCommands($router, [$words]);
+    }
+
+    public function executeCommands(MikrotikRouter $router, array $commands): void
+    {
         $this->router = $router;
-        $this->command = $words;
-        $this->commands[] = $words;
+
+        foreach ($commands as $words) {
+            $this->command = $words;
+            $this->commands[] = $words;
+        }
     }
 
     public function findOneId(MikrotikRouter $router, string $path, string $field, string $value): string
@@ -357,5 +412,16 @@ class RecordingRouterOsApiClient extends RouterOsApiClient
         $this->lookups[] = $key;
 
         return $this->ids[$key] ?? '*1';
+    }
+
+    public function findIdsWhere(MikrotikRouter $router, string $path, array $conditions): array
+    {
+        $this->router = $router;
+        $conditionKey = implode('|', array_map(fn (string $field, string $value) => "{$field}={$value}", array_keys($conditions), $conditions));
+        $key = "{$path}|{$conditionKey}";
+        $this->lookups[] = $key;
+        $ids = $this->ids[$key] ?? [];
+
+        return is_array($ids) ? $ids : [$ids];
     }
 }

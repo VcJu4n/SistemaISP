@@ -22,36 +22,59 @@ class RouterOsApiClient
      */
     public function executeCommand(MikrotikRouter $router, array $words): void
     {
-        $this->withAuthenticatedConnection($router, function () use ($words): void {
-            $this->writeSentence($words);
-            $reply = $this->readReply();
+        $this->executeCommands($router, [$words]);
+    }
 
-            if ($reply['done'] !== true) {
-                throw new RuntimeException($reply['error'] ?? 'RouterOS rechazo el comando.');
+    /**
+     * @param  list<list<string>>  $commands
+     */
+    public function executeCommands(MikrotikRouter $router, array $commands): void
+    {
+        $this->withAuthenticatedConnection($router, function () use ($commands): void {
+            foreach ($commands as $words) {
+                $this->writeSentence($words);
+                $reply = $this->readReply();
+
+                if ($reply['done'] !== true) {
+                    throw new RuntimeException($reply['error'] ?? 'RouterOS rechazo el comando.');
+                }
             }
         });
     }
 
     public function findOneId(MikrotikRouter $router, string $path, string $field, string $value): string
     {
-        $rows = [];
-
-        $this->withAuthenticatedConnection($router, function () use ($path, $field, $value, &$rows): void {
-            $this->writeSentence([
-                "{$path}/print",
-                '=.proplist=.id',
-                "?{$field}={$value}",
-            ]);
-            $rows = $this->readRowsReply();
-        });
-
-        $id = $rows[0]['.id'] ?? null;
+        $ids = $this->findIdsWhere($router, $path, [$field => $value]);
+        $id = $ids[0] ?? null;
 
         if (! is_string($id) || $id === '') {
             throw new RuntimeException("No se encontro el registro RouterOS [{$path}] con {$field}={$value}.");
         }
 
         return $id;
+    }
+
+    /**
+     * @param  array<string, string>  $conditions
+     * @return list<string>
+     */
+    public function findIdsWhere(MikrotikRouter $router, string $path, array $conditions): array
+    {
+        $rows = [];
+
+        $this->withAuthenticatedConnection($router, function () use ($path, $conditions, &$rows): void {
+            $this->writeSentence([
+                "{$path}/print",
+                '=.proplist=.id',
+                ...array_map(fn (string $field, string $value) => "?{$field}={$value}", array_keys($conditions), $conditions),
+            ]);
+            $rows = $this->readRowsReply();
+        });
+
+        return array_values(array_filter(array_map(
+            fn (array $row) => $row['.id'] ?? null,
+            $rows
+        ), fn ($id) => is_string($id) && $id !== ''));
     }
 
     /**

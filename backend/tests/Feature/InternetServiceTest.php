@@ -105,6 +105,40 @@ class InternetServiceTest extends TestCase
         $this->assertSame("{$plan->download_mbps}M/{$plan->upload_mbps}M", $operation->payload['technical_config']['simple_queue']['max_limit']);
     }
 
+    public function test_ip_firewall_service_stores_router_and_cut_ip(): void
+    {
+        [$client, $plan] = $this->clientAndPlan();
+        $router = MikrotikRouter::factory()->create(['name' => 'MikroTik principal']);
+
+        $serviceId = $this->postJson('/api/services', [
+            'client_id' => $client->id,
+            'plan_id' => $plan->id,
+            'mikrotik_router_id' => $router->id,
+            'mikrotik_control_method' => 'ip_firewall',
+            'service_ip_address' => '192.168.0.120',
+            'service_mac_address' => 'AA:BB:CC:DD:EE:20',
+        ])->assertCreated()
+            ->assertJsonPath('data.mikrotik_router.name', 'MikroTik principal')
+            ->assertJsonPath('data.mikrotik_control_method', 'ip_firewall')
+            ->assertJsonPath('data.service_ip_address', '192.168.0.120')
+            ->json('data.id');
+
+        $operation = MikrotikOperation::query()->where('internet_service_id', $serviceId)->firstOrFail();
+        $this->assertSame('sistemaisp_suspendidos', $operation->payload['technical_config']['ip_firewall']['address_list']);
+    }
+
+    public function test_ip_firewall_technical_config_requires_router_and_ip(): void
+    {
+        [$client, $plan] = $this->clientAndPlan();
+
+        $this->postJson('/api/services', [
+            'client_id' => $client->id,
+            'plan_id' => $plan->id,
+            'mikrotik_control_method' => 'ip_firewall',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['mikrotik_router_id', 'service_ip_address']);
+    }
+
     public function test_service_technical_config_can_be_updated_and_queues_sync_operation(): void
     {
         $service = $this->service();

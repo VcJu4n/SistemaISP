@@ -46,9 +46,15 @@ class RouterOsMikrotikRouterInspector implements MikrotikRouterInspector
                 fn (array $row) => $this->simpleQueueRecord($row),
                 $this->client->read($router, '/queue/simple', ['.id', 'name', 'target', 'max-limit', 'disabled', 'comment'])
             ),
-            MikrotikImportCandidate::SOURCE_DHCP_MAC => array_map(
-                fn (array $row) => $this->dhcpRecord($row),
-                $this->client->read($router, '/ip/dhcp-server/lease', ['.id', 'mac-address', 'address', 'host-name', 'comment', 'dynamic', 'disabled'])
+            MikrotikImportCandidate::SOURCE_DHCP_MAC => array_merge(
+                array_map(
+                    fn (array $row) => $this->dhcpRecord($row),
+                    $this->client->read($router, '/ip/dhcp-server/lease', ['.id', 'mac-address', 'address', 'host-name', 'comment', 'dynamic', 'disabled'])
+                ),
+                array_map(
+                    fn (array $row) => $this->neighborRecord($row),
+                    $this->client->read($router, '/ip/neighbor', ['.id', 'mac-address', 'address', 'identity', 'interface', 'platform', 'version', 'board'])
+                )
             ),
             MikrotikImportCandidate::SOURCE_HOTSPOT => array_map(
                 fn (array $row) => $this->hotspotRecord($row),
@@ -63,6 +69,8 @@ class RouterOsMikrotikRouterInspector implements MikrotikRouterInspector
      */
     private function pppoeRecord(array $row): array
     {
+        $row = $this->sanitizeRow($row);
+
         return [
             'source_type' => MikrotikImportCandidate::SOURCE_PPPOE,
             'external_id' => $row['.id'] ?? null,
@@ -79,6 +87,7 @@ class RouterOsMikrotikRouterInspector implements MikrotikRouterInspector
      */
     private function simpleQueueRecord(array $row): array
     {
+        $row = $this->sanitizeRow($row);
         $target = $this->firstTarget($row['target'] ?? null);
 
         return [
@@ -98,6 +107,7 @@ class RouterOsMikrotikRouterInspector implements MikrotikRouterInspector
      */
     private function dhcpRecord(array $row): array
     {
+        $row = $this->sanitizeRow($row);
         $identifier = $row['mac-address'] ?? '';
 
         return [
@@ -115,8 +125,32 @@ class RouterOsMikrotikRouterInspector implements MikrotikRouterInspector
      * @param  array<string, string>  $row
      * @return array<string, mixed>
      */
+    private function neighborRecord(array $row): array
+    {
+        $row = $this->sanitizeRow($row);
+        $identifier = $row['mac-address'] ?? '';
+        $identity = $row['identity'] ?? null;
+        $address = $row['address'] ?? null;
+
+        return [
+            'source_type' => MikrotikImportCandidate::SOURCE_DHCP_MAC,
+            'external_id' => $row['.id'] ?? null,
+            'identifier' => $identifier,
+            'display_name' => $identity ?: $identifier,
+            'ip_address' => filter_var($address, FILTER_VALIDATE_IP) ? $address : null,
+            'mac_address' => $row['mac-address'] ?? null,
+            'raw_payload' => $row,
+        ];
+    }
+
+    /**
+     * @param  array<string, string>  $row
+     * @return array<string, mixed>
+     */
     private function hotspotRecord(array $row): array
     {
+        $row = $this->sanitizeRow($row);
+
         return [
             'source_type' => MikrotikImportCandidate::SOURCE_HOTSPOT,
             'external_id' => $row['.id'] ?? null,
@@ -148,5 +182,22 @@ class RouterOsMikrotikRouterInspector implements MikrotikRouterInspector
         $withoutMask = explode('/', $first)[0];
 
         return filter_var($withoutMask, FILTER_VALIDATE_IP) ? $withoutMask : null;
+    }
+
+    /**
+     * @param  array<string, string>  $row
+     * @return array<string, string>
+     */
+    private function sanitizeRow(array $row): array
+    {
+        return array_map(function (string $value): string {
+            if (mb_check_encoding($value, 'UTF-8')) {
+                return $value;
+            }
+
+            $converted = mb_convert_encoding($value, 'UTF-8', 'Windows-1252, ISO-8859-1, UTF-8');
+
+            return mb_check_encoding($converted, 'UTF-8') ? $converted : iconv('UTF-8', 'UTF-8//IGNORE', $value);
+        }, $row);
     }
 }

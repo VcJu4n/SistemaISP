@@ -9,6 +9,9 @@ use RuntimeException;
 
 class RouterOsMikrotikOperationExecutor implements MikrotikOperationExecutor
 {
+    private const SUSPENDED_LIST = 'sistemaisp_suspendidos';
+    private const SUSPENDED_RAW_RULE_COMMENT = 'SistemaISP corte por mora';
+
     public function __construct(private readonly RouterOsApiClient $client) {}
 
     public function execute(MikrotikOperation $operation): void
@@ -25,10 +28,10 @@ class RouterOsMikrotikOperationExecutor implements MikrotikOperationExecutor
         }
 
         match ($operation->action) {
-            MikrotikOperation::ACTION_CREATE_ACCESS => $this->client->executeCommand($service->mikrotikRouter, $this->createAccessCommand($service)),
-            MikrotikOperation::ACTION_SUSPEND => $this->client->executeCommand($service->mikrotikRouter, $this->suspendCommand($service)),
-            MikrotikOperation::ACTION_REACTIVATE => $this->client->executeCommand($service->mikrotikRouter, $this->reactivateCommand($service)),
-            MikrotikOperation::ACTION_CHANGE_PLAN => $this->client->executeCommand($service->mikrotikRouter, $this->changePlanCommand($service)),
+            MikrotikOperation::ACTION_CREATE_ACCESS => $this->client->executeCommands($service->mikrotikRouter, $this->createAccessCommands($service)),
+            MikrotikOperation::ACTION_SUSPEND => $this->client->executeCommands($service->mikrotikRouter, $this->suspendCommands($service)),
+            MikrotikOperation::ACTION_REACTIVATE => $this->client->executeCommands($service->mikrotikRouter, $this->reactivateCommands($service)),
+            MikrotikOperation::ACTION_CHANGE_PLAN => $this->client->executeCommands($service->mikrotikRouter, $this->changePlanCommands($service)),
             default => throw new RuntimeException("La accion MikroTik [{$operation->action}] no esta soportada."),
         };
     }
@@ -36,11 +39,12 @@ class RouterOsMikrotikOperationExecutor implements MikrotikOperationExecutor
     /**
      * @return list<string>
      */
-    private function createAccessCommand(InternetService $service): array
+    private function createAccessCommands(InternetService $service): array
     {
         return match ($service->mikrotik_control_method) {
-            'pppoe' => $this->pppoeCreateCommand($service),
-            'simple_queue' => $this->simpleQueueCreateCommand($service),
+            'pppoe' => [$this->pppoeCreateCommand($service)],
+            'simple_queue' => [$this->simpleQueueCreateCommand($service)],
+            'ip_firewall' => $this->ipFirewallReactivateCommands($service),
             default => throw new RuntimeException("Metodo de control MikroTik [{$service->mikrotik_control_method}] no soportado para crear acceso."),
         };
     }
@@ -48,11 +52,12 @@ class RouterOsMikrotikOperationExecutor implements MikrotikOperationExecutor
     /**
      * @return list<string>
      */
-    private function suspendCommand(InternetService $service): array
+    private function suspendCommands(InternetService $service): array
     {
         return match ($service->mikrotik_control_method) {
-            'pppoe' => $this->pppoeSetDisabledCommand($service, true),
-            'simple_queue' => $this->simpleQueueSetDisabledCommand($service, true),
+            'pppoe' => [$this->pppoeSetDisabledCommand($service, true)],
+            'simple_queue' => [$this->simpleQueueSetDisabledCommand($service, true)],
+            'ip_firewall' => $this->ipFirewallSuspendCommands($service),
             default => throw new RuntimeException("Metodo de control MikroTik [{$service->mikrotik_control_method}] no soportado para suspender acceso."),
         };
     }
@@ -60,11 +65,12 @@ class RouterOsMikrotikOperationExecutor implements MikrotikOperationExecutor
     /**
      * @return list<string>
      */
-    private function reactivateCommand(InternetService $service): array
+    private function reactivateCommands(InternetService $service): array
     {
         return match ($service->mikrotik_control_method) {
-            'pppoe' => $this->pppoeSetDisabledCommand($service, false),
-            'simple_queue' => $this->simpleQueueSetDisabledCommand($service, false),
+            'pppoe' => [$this->pppoeSetDisabledCommand($service, false)],
+            'simple_queue' => [$this->simpleQueueSetDisabledCommand($service, false)],
+            'ip_firewall' => $this->ipFirewallReactivateCommands($service),
             default => throw new RuntimeException("Metodo de control MikroTik [{$service->mikrotik_control_method}] no soportado para reactivar acceso."),
         };
     }
@@ -72,11 +78,12 @@ class RouterOsMikrotikOperationExecutor implements MikrotikOperationExecutor
     /**
      * @return list<string>
      */
-    private function changePlanCommand(InternetService $service): array
+    private function changePlanCommands(InternetService $service): array
     {
         return match ($service->mikrotik_control_method) {
-            'pppoe' => $this->pppoeChangeProfileCommand($service),
-            'simple_queue' => $this->simpleQueueChangeSpeedCommand($service),
+            'pppoe' => [$this->pppoeChangeProfileCommand($service)],
+            'simple_queue' => [$this->simpleQueueChangeSpeedCommand($service)],
+            'ip_firewall' => [],
             default => throw new RuntimeException("Metodo de control MikroTik [{$service->mikrotik_control_method}] no soportado para cambiar plan."),
         };
     }
@@ -189,6 +196,72 @@ class RouterOsMikrotikOperationExecutor implements MikrotikOperationExecutor
             '=max-limit='.$this->maxLimit($service),
             '=comment='.$this->comment($service),
         ];
+    }
+
+    /**
+     * @return list<list<string>>
+     */
+    private function ipFirewallSuspendCommands(InternetService $service): array
+    {
+        $address = $this->serviceAddress($service);
+        $commands = $this->removeSuspendedAddressCommands($service);
+
+        $commands[] = [
+            '/ip/firewall/address-list/add',
+            '=list='.self::SUSPENDED_LIST,
+            '=address='.$address,
+            '=comment='.$this->comment($service),
+            '=disabled=no',
+        ];
+
+        if ($this->client->findIdsWhere($service->mikrotikRouter, '/ip/firewall/raw', ['comment' => self::SUSPENDED_RAW_RULE_COMMENT]) === []) {
+            $commands[] = [
+                '/ip/firewall/raw/add',
+                '=chain=prerouting',
+                '=src-address-list='.self::SUSPENDED_LIST,
+                '=action=drop',
+                '=comment='.self::SUSPENDED_RAW_RULE_COMMENT,
+                '=disabled=no',
+            ];
+        }
+
+        return $commands;
+    }
+
+    /**
+     * @return list<list<string>>
+     */
+    private function ipFirewallReactivateCommands(InternetService $service): array
+    {
+        return $this->removeSuspendedAddressCommands($service);
+    }
+
+    /**
+     * @return list<list<string>>
+     */
+    private function removeSuspendedAddressCommands(InternetService $service): array
+    {
+        $address = $this->serviceAddress($service);
+        $ids = $this->client->findIdsWhere($service->mikrotikRouter, '/ip/firewall/address-list', [
+            'list' => self::SUSPENDED_LIST,
+            'address' => $address,
+        ]);
+
+        return array_map(fn (string $id) => [
+            '/ip/firewall/address-list/remove',
+            '=.id='.$id,
+        ], $ids);
+    }
+
+    private function serviceAddress(InternetService $service): string
+    {
+        $address = $service->service_ip_address ?: $service->client_antenna_ip;
+
+        if (! $address) {
+            throw new RuntimeException('El servicio por firewall no tiene IP configurada.');
+        }
+
+        return $address;
     }
 
     private function pppoeSecretId(InternetService $service): string

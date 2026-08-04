@@ -13,7 +13,7 @@ trait ValidatesServiceTechnicalConfig
     {
         $methodRule = $methodRequired ? ['required'] : ['nullable'];
         $controlMethod = $this->input('mikrotik_control_method', 'manual');
-        $requiresRouter = in_array($controlMethod, ['pppoe', 'simple_queue'], true);
+        $requiresRouter = in_array($controlMethod, ['pppoe', 'simple_queue', 'ip_firewall'], true);
         $service = $this->route('service');
         $requiresPppoePassword = $controlMethod === 'pppoe' && (! $service || $service->pppoe_password === null);
 
@@ -24,7 +24,7 @@ trait ValidatesServiceTechnicalConfig
                 'integer',
                 Rule::exists('mikrotik_routers', 'id')->where('active', true),
             ],
-            'mikrotik_control_method' => [...$methodRule, Rule::in(['manual', 'pppoe', 'simple_queue'])],
+            'mikrotik_control_method' => [...$methodRule, Rule::in(['manual', 'pppoe', 'simple_queue', 'ip_firewall'])],
             'pppoe_username' => [
                 'exclude_unless:mikrotik_control_method,pppoe',
                 'required',
@@ -48,7 +48,7 @@ trait ValidatesServiceTechnicalConfig
                 Rule::unique('internet_services', 'simple_queue_name')->ignore($serviceId),
             ],
             'service_ip_address' => [
-                'exclude_unless:mikrotik_control_method,simple_queue',
+                Rule::excludeIf(! in_array($controlMethod, ['simple_queue', 'ip_firewall'], true)),
                 'required',
                 'ip',
                 Rule::unique('internet_services', 'service_ip_address')->ignore($serviceId),
@@ -143,10 +143,14 @@ trait ValidatesServiceTechnicalConfig
             $data['service_ip_address'] = null;
         }
 
-        if ($method === 'simple_queue') {
+        if (in_array($method, ['simple_queue', 'ip_firewall'], true)) {
             $data['pppoe_username'] = null;
             $data['pppoe_password'] = null;
             $data['pppoe_profile'] = null;
+        }
+
+        if ($method === 'ip_firewall') {
+            $data['simple_queue_name'] = null;
         }
 
         return $data;

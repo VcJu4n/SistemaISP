@@ -119,6 +119,14 @@ class MikrotikImportService
                 ->where('mikrotik_control_method', 'simple_queue')
                 ->where('simple_queue_name', $candidate->identifier)
                 ->first(),
+            MikrotikImportCandidate::SOURCE_DHCP_MAC => InternetService::query()
+                ->where('mikrotik_router_id', $candidate->mikrotik_router_id)
+                ->where('mikrotik_control_method', 'ip_firewall')
+                ->where(function ($query) use ($candidate): void {
+                    $query->where('service_ip_address', $candidate->ip_address)
+                        ->orWhere('service_mac_address', $candidate->mac_address);
+                })
+                ->first(),
             default => null,
         };
     }
@@ -133,6 +141,9 @@ class MikrotikImportService
 
         if ($existing) {
             $this->assertCandidateMatchesService($candidate, $existing);
+            if ($candidate->source_type === MikrotikImportCandidate::SOURCE_DHCP_MAC) {
+                $existing->update($this->technicalConfig($candidate));
+            }
             return $existing;
         }
 
@@ -171,6 +182,7 @@ class MikrotikImportService
         $matches = match ($candidate->source_type) {
             MikrotikImportCandidate::SOURCE_PPPOE => $service->mikrotik_control_method === 'pppoe' && $service->pppoe_username === $candidate->identifier,
             MikrotikImportCandidate::SOURCE_SIMPLE_QUEUE => $service->mikrotik_control_method === 'simple_queue' && $service->simple_queue_name === $candidate->identifier,
+            MikrotikImportCandidate::SOURCE_DHCP_MAC => in_array($service->mikrotik_control_method, ['manual', 'ip_firewall'], true),
             default => true,
         };
 
@@ -197,6 +209,16 @@ class MikrotikImportService
                 'service_ip_address' => $candidate->ip_address,
                 'service_mac_address' => $candidate->mac_address,
                 'technical_notes' => 'Importado desde Simple Queue MikroTik.',
+            ],
+            MikrotikImportCandidate::SOURCE_DHCP_MAC => [
+                'mikrotik_router_id' => $candidate->mikrotik_router_id,
+                'mikrotik_control_method' => 'ip_firewall',
+                'service_ip_address' => $candidate->ip_address,
+                'service_mac_address' => $candidate->mac_address,
+                'client_antenna_ip' => $candidate->ip_address,
+                'client_antenna_mac' => $candidate->mac_address,
+                'client_antenna_device_name' => $candidate->display_name,
+                'technical_notes' => 'Importado desde DHCP/MAC MikroTik para corte por firewall.',
             ],
             default => [
                 'mikrotik_control_method' => 'manual',
