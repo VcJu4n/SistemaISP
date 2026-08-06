@@ -25,6 +25,9 @@ class UpdateClientRequest extends FormRequest
             'phone' => ['required', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:255'],
             'address' => ['nullable', 'string', 'max:500'],
+            'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
+            'location_reference' => ['nullable', 'string', 'max:500'],
             'zone_id' => ['required', 'integer', 'exists:zones,id'],
             'installation_date' => ['nullable', 'date'],
         ];

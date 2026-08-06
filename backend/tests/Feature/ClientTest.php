@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Zone;
 use App\Models\InternetService;
 use App\Models\Plan;
+use App\Models\MikrotikRouter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -80,6 +81,48 @@ class ClientTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.zone.name', 'Norte');
+    }
+
+    public function test_client_location_is_stored_and_returned(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+        $zone = Zone::factory()->create();
+
+        $this->postJson('/api/clients', [
+            ...$this->clientData($zone),
+            'latitude' => -17.783421,
+            'longitude' => -63.182135,
+            'location_reference' => 'Casa azul frente a la cancha.',
+        ])->assertCreated()
+            ->assertJsonPath('data.latitude', '-17.7834210')
+            ->assertJsonPath('data.longitude', '-63.1821350');
+    }
+
+    public function test_clients_can_be_filtered_by_mikrotik_router(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+        $firstRouter = MikrotikRouter::factory()->create();
+        $secondRouter = MikrotikRouter::factory()->create();
+        $firstClient = Client::factory()->create();
+        $secondClient = Client::factory()->create();
+        InternetService::factory()->create(['client_id' => $firstClient, 'mikrotik_router_id' => $firstRouter]);
+        InternetService::factory()->create(['client_id' => $secondClient, 'mikrotik_router_id' => $secondRouter]);
+
+        $this->getJson("/api/clients?mikrotik_router_id={$firstRouter->id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $firstClient->id)
+            ->assertJsonPath('data.0.internet_service.mikrotik_router.name', $firstRouter->name);
+    }
+
+    public function test_both_coordinates_are_required_together(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+        $zone = Zone::factory()->create();
+
+        $this->postJson('/api/clients', [...$this->clientData($zone), 'latitude' => -17.783421])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('longitude');
     }
 
     public function test_archiving_a_client_uses_soft_deletes(): void

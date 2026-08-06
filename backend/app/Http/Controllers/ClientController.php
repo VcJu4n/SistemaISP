@@ -22,12 +22,15 @@ class ClientController extends Controller
             'per_page' => ['nullable', 'integer', 'min:5', 'max:100'],
             'all' => ['nullable', 'boolean'],
             'without_service' => ['nullable', 'boolean'],
+            'mikrotik_router_id' => ['nullable', 'integer', 'exists:mikrotik_routers,id'],
+            'without_mikrotik' => ['nullable', 'boolean'],
         ]);
 
         $clients = Client::query()
             ->with('zone:id,name,active')
-            ->with('internetService:id,client_id,plan_id,status,next_due_date,suspended_at,suspension_reason')
+            ->with('internetService:id,client_id,plan_id,mikrotik_router_id,status,next_due_date,suspended_at,suspension_reason')
             ->with('internetService.plan:id,name,monthly_price')
+            ->with('internetService.mikrotikRouter:id,name')
             ->withExists('internetService')
             ->when($validated['search'] ?? null, function (Builder $query, string $search): void {
                 $term = '%'.mb_strtolower($search).'%';
@@ -42,6 +45,14 @@ class ClientController extends Controller
             ->when($validated['status'] ?? null, fn (Builder $query, string $status) => $query->where('status', $status))
             ->when($validated['zone_id'] ?? null, fn (Builder $query, int $zoneId) => $query->where('zone_id', $zoneId))
             ->when($validated['without_service'] ?? false, fn (Builder $query) => $query->whereDoesntHave('internetService'))
+            ->when($validated['mikrotik_router_id'] ?? null, fn (Builder $query, int $routerId) => $query->whereHas(
+                'internetService',
+                fn (Builder $service) => $service->where('mikrotik_router_id', $routerId)
+            ))
+            ->when($validated['without_mikrotik'] ?? false, fn (Builder $query) => $query->where(function (Builder $query): void {
+                $query->whereDoesntHave('internetService')
+                    ->orWhereHas('internetService', fn (Builder $service) => $service->whereNull('mikrotik_router_id'));
+            }))
             ->latest('id');
 
         if ($validated['all'] ?? false) {
@@ -81,6 +92,7 @@ class ClientController extends Controller
             'data' => $client->load([
                 'zone:id,name,active',
                 'internetService.plan:id,name,monthly_price,download_mbps,upload_mbps,active',
+                'internetService.mikrotikRouter:id,name',
                 'internetService.histories.user:id,name',
             ]),
         ]);

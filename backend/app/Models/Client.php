@@ -20,6 +20,9 @@ class Client extends Model
         'phone',
         'email',
         'address',
+        'latitude',
+        'longitude',
+        'location_reference',
         'zone_id',
         'installation_date',
         'status',
@@ -29,6 +32,8 @@ class Client extends Model
     {
         return [
             'installation_date' => 'date:Y-m-d',
+            'latitude' => 'decimal:7',
+            'longitude' => 'decimal:7',
         ];
     }
 

@@ -1,6 +1,7 @@
-import { Archive, CalendarDays, Clock, Eye, Pencil, Plus, Search, Users, X } from 'lucide-react'
+import { Archive, CalendarDays, Clock, Copy, Eye, MapPin, Pencil, Plus, Search, Users, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { api, getApiError } from '../lib/api'
+import { LocationPickerModal } from '../components/LocationPickerModal'
 
 type ClientStatus = 'active' | 'suspended'
 type ServiceStatus = 'active' | 'suspended'
@@ -8,9 +9,10 @@ type PaymentMethod = 'cash' | 'transfer' | 'other'
 
 type Zone = { id: number; name: string; active: boolean }
 type Plan = { id: number; name: string; monthly_price: string | null; download_mbps?: number; upload_mbps?: number; active?: boolean }
+type MikrotikRouter = { id: number; name: string; active: boolean }
 type ServiceHistory = { id: number; event_type: string; description: string; metadata: Record<string, unknown> | null; occurred_at: string; user?: { id: number; name: string } | null }
 type NotificationLog = { id: number; type: string; channel: string; phone: string; message: string; sent_at: string; template?: { id: number; key: string; name: string } | null; user?: { id: number; name: string } | null }
-type InternetService = { id: number; client_id: number; plan_id: number; status: ServiceStatus; next_due_date: string | null; suspended_at: string | null; suspension_reason: string | null; plan: Plan; histories?: ServiceHistory[] }
+type InternetService = { id: number; client_id: number; plan_id: number; mikrotik_router_id: number | null; status: ServiceStatus; next_due_date: string | null; suspended_at: string | null; suspension_reason: string | null; plan: Plan; mikrotik_router?: MikrotikRouter | null; histories?: ServiceHistory[] }
 type Client = {
   id: number
   full_name: string
@@ -18,6 +20,9 @@ type Client = {
   phone: string
   email: string | null
   address: string | null
+  latitude: string | null
+  longitude: string | null
+  location_reference: string | null
   zone_id: number
   zone: Zone
   installation_date: string | null
@@ -26,11 +31,11 @@ type Client = {
   internet_service_exists?: boolean
 }
 type Payment = { id: number; amount: string; paid_at: string; billing_period: string; payment_method: PaymentMethod; observation: string | null; user?: { id: number; name: string } | null }
-type ClientForm = { full_name: string; document: string; phone: string; email: string; address: string; zone_id: string; installation_date: string }
+type ClientForm = { full_name: string; document: string; phone: string; email: string; address: string; latitude: string; longitude: string; location_reference: string; zone_id: string; installation_date: string }
 type ListResponse = { data: Client[]; meta: { current_page: number; last_page: number; per_page: number; total: number } }
 type PaymentResponse = { data: Payment[]; meta: { current_page: number; last_page: number; per_page: number; total: number } }
 
-const emptyForm: ClientForm = { full_name: '', document: '', phone: '', email: '', address: '', zone_id: '', installation_date: '' }
+const emptyForm: ClientForm = { full_name: '', document: '', phone: '', email: '', address: '', latitude: '', longitude: '', location_reference: '', zone_id: '', installation_date: '' }
 const methodLabels: Record<PaymentMethod, string> = { cash: 'Efectivo', transfer: 'Transferencia', other: 'Otro' }
 
 function toForm(client: Client): ClientForm {
@@ -40,6 +45,9 @@ function toForm(client: Client): ClientForm {
     phone: client.phone,
     email: client.email ?? '',
     address: client.address ?? '',
+    latitude: client.latitude ?? '',
+    longitude: client.longitude ?? '',
+    location_reference: client.location_reference ?? '',
     zone_id: String(client.zone_id),
     installation_date: client.installation_date ?? '',
   }
@@ -66,6 +74,7 @@ export function ClientsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [status, setStatus] = useState('')
   const [zone, setZone] = useState('')
+  const [router, setRouter] = useState('')
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
@@ -73,6 +82,7 @@ export function ClientsPage() {
   const [detailClient, setDetailClient] = useState<Client | null>(null)
   const [archiveClient, setArchiveClient] = useState<Client | null>(null)
   const [zones, setZones] = useState<Zone[]>([])
+  const [routers, setRouters] = useState<MikrotikRouter[]>([])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -83,25 +93,29 @@ export function ClientsPage() {
   }, [search])
 
   useEffect(() => {
-    const loadZones = async () => {
-      const response = await api.get<{ data: Zone[] }>('/zones', { params: { all: 1 } })
-      setZones(response.data.data)
+    const loadCatalogs = async () => {
+      const [zonesResponse, routersResponse] = await Promise.all([
+        api.get<{ data: Zone[] }>('/zones', { params: { all: 1 } }),
+        api.get<{ data: MikrotikRouter[] }>('/mikrotik-routers', { params: { all: 1, active: 1 } }),
+      ])
+      setZones(zonesResponse.data.data)
+      setRouters(routersResponse.data.data)
     }
-    void loadZones()
+    void loadCatalogs()
   }, [])
 
   const loadClients = useCallback(async () => {
     setLoading(true)
     try {
       const response = await api.get<ListResponse>('/clients', {
-        params: { search: debouncedSearch || undefined, status: status || undefined, zone_id: zone || undefined, page },
+        params: { search: debouncedSearch || undefined, status: status || undefined, zone_id: zone || undefined, mikrotik_router_id: router && router !== 'unassigned' ? router : undefined, without_mikrotik: router === 'unassigned' ? 1 : undefined, page },
       })
       setClients(response.data.data)
       setMeta(response.data.meta)
     } finally {
       setLoading(false)
     }
-  }, [debouncedSearch, page, status, zone])
+  }, [debouncedSearch, page, router, status, zone])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -136,16 +150,17 @@ export function ClientsPage() {
         <label className="search-box"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nombre, cedula, telefono o correo" /></label>
         <select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1) }}><option value="">Todos los estados</option><option value="active">Activos</option><option value="suspended">Suspendidos</option></select>
         <select value={zone} onChange={(event) => { setZone(event.target.value); setPage(1) }}><option value="">Todas las zonas</option>{zones.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select>
+        <select value={router} onChange={(event) => { setRouter(event.target.value); setPage(1) }}><option value="">Todos los MikroTik</option>{routers.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}<option value="unassigned">Sin MikroTik asignado</option></select>
       </div>
 
       <div className="table-card">
         {loading ? <div className="table-message">Cargando clientes...</div> : clients.length === 0 ? (
           <div className="table-message"><Users size={30} /><strong>No se encontraron clientes con ese criterio</strong></div>
         ) : (
-          <div className="table-scroll"><table><thead><tr><th>Cliente</th><th>Cedula/RUC</th><th>Telefono</th><th>Zona</th><th>Vencimiento</th><th>Estado</th><th aria-label="Acciones" /></tr></thead><tbody>
+          <div className="table-scroll"><table><thead><tr><th>Cliente</th><th>Cedula/RUC</th><th>Telefono</th><th>MikroTik</th><th>Zona</th><th>Vencimiento</th><th>Estado</th><th aria-label="Acciones" /></tr></thead><tbody>
             {clients.map((client) => <tr key={client.id}>
               <td><button className="client-name" onClick={() => void openDetail(client)}>{client.full_name}<small>ID #{client.id}</small></button></td>
-              <td>{client.document}</td><td>{client.phone}</td><td>{client.zone.name}</td>
+              <td>{client.document}</td><td>{client.phone}</td><td>{client.internet_service?.mikrotik_router?.name ?? <span className="muted-cell">Sin asignar</span>}</td><td>{client.zone.name}</td>
               <td><DueDateBadge value={client.internet_service?.next_due_date ?? null} /></td>
               <td><span className={`status-badge ${client.status}`}>{client.status === 'active' ? 'Activo' : 'Suspendido'}</span></td>
               <td><div className="row-actions"><button title="Ver detalle" onClick={() => void openDetail(client)}><Eye size={17} /></button><button title="Editar" onClick={() => setFormClient(client)}><Pencil size={17} /></button><button disabled={client.internet_service_exists} className="danger" title={client.internet_service_exists ? 'No se puede archivar: tiene un servicio asignado' : 'Archivar'} onClick={() => setArchiveClient(client)}><Archive size={17} /></button></div></td>
@@ -177,12 +192,13 @@ function ClientFormModal({ client, zones, onClose, onSaved }: { client: Client |
   const [form, setForm] = useState<ClientForm>(client ? toForm(client) : emptyForm)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [mapOpen, setMapOpen] = useState(false)
   const set = (field: keyof ClientForm, value: string) => setForm((current) => ({ ...current, [field]: value }))
 
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setSaving(true); setError('')
     try {
-      const payload = { ...form, zone_id: Number(form.zone_id), email: form.email || null, address: form.address || null, installation_date: form.installation_date || null }
+      const payload = { ...form, zone_id: Number(form.zone_id), email: form.email || null, address: form.address || null, latitude: form.latitude || null, longitude: form.longitude || null, location_reference: form.location_reference || null, installation_date: form.installation_date || null }
       if (client) await api.put(`/clients/${client.id}`, payload)
       else await api.post('/clients', payload)
       await onSaved(client ? 'Cliente actualizado correctamente.' : 'Cliente registrado correctamente.')
@@ -198,10 +214,15 @@ function ClientFormModal({ client, zones, onClose, onSaved }: { client: Client |
       <label className="field"><span>Telefono *</span><input required maxLength={30} value={form.phone} onChange={(e) => set('phone', e.target.value)} /></label>
       <label className="field"><span>Correo electronico</span><input type="email" value={form.email} onChange={(e) => set('email', e.target.value)} /></label>
       <label className="field full"><span>Direccion</span><textarea maxLength={500} value={form.address} onChange={(e) => set('address', e.target.value)} /></label>
+      <label className="field"><span>Latitud</span><input type="number" min="-90" max="90" step="any" placeholder="-17.783421" value={form.latitude} onChange={(e) => set('latitude', e.target.value)} /></label>
+      <label className="field"><span>Longitud</span><input type="number" min="-180" max="180" step="any" placeholder="-63.182135" value={form.longitude} onChange={(e) => set('longitude', e.target.value)} /></label>
+      <label className="field full"><span>Referencia de ubicacion</span><textarea maxLength={500} placeholder="Casa azul frente a la cancha" value={form.location_reference} onChange={(e) => set('location_reference', e.target.value)} /></label>
+      <div className="full location-form-action"><button type="button" className="button button-secondary button-fit" onClick={() => setMapOpen(true)}><MapPin size={17} /> {form.latitude && form.longitude ? 'Corregir ubicacion en el mapa' : 'Marcar ubicacion en el mapa'}</button>{form.latitude && form.longitude && <small>Ubicacion seleccionada: {form.latitude}, {form.longitude}</small>}</div>
       <label className="field"><span>Zona de cobertura *</span><select required value={form.zone_id} onChange={(e) => set('zone_id', e.target.value)}><option value="">Selecciona una zona</option>{zones.map((zone) => <option value={zone.id} key={zone.id}>{zone.name}</option>)}</select></label>
       <label className="field"><span>Fecha de instalacion</span><input type="date" value={form.installation_date} onChange={(e) => set('installation_date', e.target.value)} /></label>
       <footer className="form-actions full"><button type="button" className="button button-secondary" onClick={onClose}>Cancelar</button><button className="button button-primary button-fit" disabled={saving}>{saving ? 'Guardando...' : client ? 'Actualizar' : 'Guardar cliente'}</button></footer>
     </form>
+    {mapOpen && <LocationPickerModal initialPosition={form.latitude && form.longitude ? { latitude: Number(form.latitude), longitude: Number(form.longitude) } : null} onClose={() => setMapOpen(false)} onConfirm={(coordinates) => { set('latitude', coordinates.latitude.toFixed(7)); set('longitude', coordinates.longitude.toFixed(7)); setMapOpen(false) }} />}
   </section></div>
 }
 
@@ -219,10 +240,13 @@ function ClientDetailModal({ client, onClose, onEdit, onChanged }: { client: Cli
 }
 
 function ClientInfoTab({ client, onClose, onEdit, onDueUpdated }: { client: Client; onClose: () => void; onEdit: () => void; onDueUpdated: () => void }) {
-  const fields = [['Cedula/RUC', client.document], ['Telefono', client.phone], ['Correo', client.email || 'No registrado'], ['Direccion', client.address || 'No registrada'], ['Zona', client.zone.name], ['Instalacion', formatDate(client.installation_date)]]
+  const fields = [['Cedula/RUC', client.document], ['Telefono', client.phone], ['Correo', client.email || 'No registrado'], ['Direccion', client.address || 'No registrada'], ['Referencia', client.location_reference || 'No registrada'], ['Zona', client.zone.name], ['MikroTik', client.internet_service?.mikrotik_router?.name || 'Sin asignar'], ['Instalacion', formatDate(client.installation_date)]]
+  const hasLocation = client.latitude !== null && client.longitude !== null
+  const coordinates = hasLocation ? `${client.latitude},${client.longitude}` : ''
   return <>
     <div className="detail-header-row"><span className={`status-badge ${client.status}`}>{client.status === 'active' ? 'Activo' : 'Suspendido'}</span>{client.internet_service && <DueDateBadge value={client.internet_service.next_due_date} />}</div>
     <dl className="detail-list">{fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+    <section className="nested-panel"><header><div><h3><MapPin size={17} /> Ubicacion</h3><p>{hasLocation ? coordinates : 'Coordenadas no registradas'}</p></div>{hasLocation && <div className="row-actions"><a className="button button-primary button-fit" href={`https://www.google.com/maps?q=${client.latitude},${client.longitude}`} target="_blank" rel="noreferrer"><MapPin size={16} /> Abrir en mapa</a><button title="Copiar coordenadas" onClick={() => void navigator.clipboard.writeText(coordinates)}><Copy size={17} /></button></div>}</header></section>
     {client.internet_service ? <DueDateEditor service={client.internet_service} onUpdated={onDueUpdated} /> : <div className="alert alert-error">Este cliente aun no tiene servicio asignado.</div>}
     <footer className="form-actions"><button className="button button-secondary" onClick={onClose}>Cerrar</button><button className="button button-primary button-fit" onClick={onEdit}><Pencil size={17} /> Editar</button></footer>
   </>
