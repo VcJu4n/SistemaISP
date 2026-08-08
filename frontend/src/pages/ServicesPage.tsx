@@ -8,11 +8,12 @@ type Plan = { id: number; name: string; download_mbps: number; upload_mbps: numb
 type History = { id: number; event_type: string; description: string; metadata: Record<string, unknown> | null; occurred_at: string }
 type MikrotikRouter = { id: number; name: string; connection_status: 'pending' | 'connected' | 'disconnected'; active: boolean }
 type ControlMethod = 'manual' | 'pppoe' | 'simple_queue' | 'ip_firewall'
+type AccessType = 'antenna' | 'fiber'
 type MikrotikOperation = { id: number; action: 'create_access' | 'suspend' | 'reactivate' | 'change_plan'; status: 'pending' | 'processing' | 'synced' | 'failed'; attempts: number; last_error: string | null; last_attempt_at: string | null; synced_at: string | null; router?: MikrotikRouter | null }
-type Service = { id: number; client_id: number; plan_id: number; status: 'active' | 'suspended'; installation_date: string | null; notes: string | null; suspended_at: string | null; suspension_reason: string | null; suspension_notes: string | null; mikrotik_router_id: number | null; mikrotik_control_method: ControlMethod; pppoe_username: string | null; pppoe_profile: string | null; simple_queue_name: string | null; service_ip_address: string | null; service_mac_address: string | null; client_antenna_ip: string | null; client_antenna_mac: string | null; client_antenna_brand_model: string | null; client_antenna_device_name: string | null; technical_notes: string | null; client: Client; plan: Plan; mikrotik_router?: MikrotikRouter | null; histories?: History[]; mikrotik_operations?: MikrotikOperation[] }
+type Service = { id: number; client_id: number; plan_id: number; status: 'active' | 'suspended'; access_type: AccessType | null; installation_date: string | null; notes: string | null; suspended_at: string | null; suspension_reason: string | null; suspension_notes: string | null; mikrotik_router_id: number | null; mikrotik_control_method: ControlMethod; pppoe_username: string | null; pppoe_profile: string | null; simple_queue_name: string | null; service_ip_address: string | null; service_mac_address: string | null; client_antenna_ip: string | null; client_antenna_mac: string | null; client_antenna_brand_model: string | null; client_antenna_device_name: string | null; technical_notes: string | null; client: Client; plan: Plan; mikrotik_router?: MikrotikRouter | null; histories?: History[]; mikrotik_operations?: MikrotikOperation[] }
 type Meta = { current_page: number; last_page: number; total: number }
 type Action = { type: 'suspend' | 'reactivate' | 'plan' | 'technical'; service: Service }
-type TechnicalForm = { mikrotik_router_id: string; mikrotik_control_method: ControlMethod; pppoe_username: string; pppoe_password: string; pppoe_profile: string; simple_queue_name: string; service_ip_address: string; service_mac_address: string; client_antenna_ip: string; client_antenna_mac: string; client_antenna_brand_model: string; client_antenna_device_name: string; technical_notes: string }
+type TechnicalForm = { access_type: AccessType; mikrotik_router_id: string; mikrotik_control_method: ControlMethod; pppoe_username: string; pppoe_password: string; pppoe_profile: string; simple_queue_name: string; service_ip_address: string; service_mac_address: string; client_antenna_ip: string; client_antenna_mac: string; client_antenna_brand_model: string; client_antenna_device_name: string; technical_notes: string }
 
 export function ServicesPage() {
   const [services, setServices] = useState<Service[]>([])
@@ -24,6 +25,7 @@ export function ServicesPage() {
   const [status, setStatus] = useState('')
   const [zoneId, setZoneId] = useState('')
   const [planId, setPlanId] = useState('')
+  const [accessType, setAccessType] = useState('')
   const [page, setPage] = useState(1)
   const [modal, setModal] = useState<'new' | null>(null)
   const [detail, setDetail] = useState<Service | null>(null)
@@ -40,7 +42,7 @@ export function ServicesPage() {
     setLoading(true)
     try {
       const [serviceResponse, zoneResponse, planResponse] = await Promise.all([
-        api.get<{ data: Service[]; meta: Meta }>('/services', { params: { search: debounced || undefined, status: status || undefined, zone_id: zoneId || undefined, plan_id: planId || undefined, page } }),
+        api.get<{ data: Service[]; meta: Meta }>('/services', { params: { search: debounced || undefined, status: status || undefined, zone_id: zoneId || undefined, plan_id: planId || undefined, access_type: accessType || undefined, page } }),
         api.get<{ data: Zone[] }>('/zones', { params: { all: 1, active: 1 } }),
         api.get<{ data: Plan[] }>('/plans', { params: { all: 1 } }),
       ])
@@ -51,7 +53,7 @@ export function ServicesPage() {
     } finally {
       setLoading(false)
     }
-  }, [debounced, page, planId, status, zoneId])
+  }, [accessType, debounced, page, planId, status, zoneId])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -85,6 +87,7 @@ export function ServicesPage() {
         <select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1) }}><option value="">Todos los estados</option><option value="active">Activos</option><option value="suspended">Suspendidos</option></select>
         <select value={zoneId} onChange={(event) => { setZoneId(event.target.value); setPage(1) }}><option value="">Todas las zonas</option>{zones.map((zone) => <option value={zone.id} key={zone.id}>{zone.name}</option>)}</select>
         <select value={planId} onChange={(event) => { setPlanId(event.target.value); setPage(1) }}><option value="">Todos los planes</option>{plans.map((plan) => <option value={plan.id} key={plan.id}>{plan.name}</option>)}</select>
+        <select value={accessType} onChange={(event) => { setAccessType(event.target.value); setPage(1) }}><option value="">Antena y fibra</option><option value="antenna">Solo antena</option><option value="fiber">Solo fibra</option></select>
       </div>
 
       <div className="table-card">
@@ -128,6 +131,7 @@ function TechnicalMethodBadge({ service }: { service: Service }) {
 
 function initialTechnicalForm(service?: Service | null): TechnicalForm {
   return {
+    access_type: service?.access_type ?? 'antenna',
     mikrotik_router_id: service?.mikrotik_router_id ? String(service.mikrotik_router_id) : '',
     mikrotik_control_method: service?.mikrotik_control_method ?? 'manual',
     pppoe_username: service?.pppoe_username ?? '',
@@ -146,6 +150,7 @@ function initialTechnicalForm(service?: Service | null): TechnicalForm {
 
 function technicalPayload(form: TechnicalForm) {
   const payload: Record<string, string | number | null> = {
+    access_type: form.access_type,
     mikrotik_router_id: form.mikrotik_control_method === 'manual' ? null : Number(form.mikrotik_router_id),
     mikrotik_control_method: form.mikrotik_control_method,
     pppoe_username: form.pppoe_username || null,
@@ -224,6 +229,7 @@ function TechnicalConfigFields({ form, setForm, routers, plan }: { form: Technic
   const managed = form.mikrotik_control_method !== 'manual'
 
   return <>
+    <label className="field full"><span>Tipo de conexion *</span><select required value={form.access_type} onChange={(event) => setForm({ ...form, access_type: event.target.value as AccessType })}><option value="antenna">Antena</option><option value="fiber">Fibra</option></select></label>
     <div className="technical-section full">
       <span className="eyebrow">Configuracion tecnica</span>
       <div className="method-options">

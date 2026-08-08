@@ -38,6 +38,7 @@ class MikrotikImportCandidate extends Model
         'client_id',
         'internet_service_id',
         'source_type',
+        'access_type',
         'external_id',
         'identifier',
         'display_name',

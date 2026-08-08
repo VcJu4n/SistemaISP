@@ -73,6 +73,7 @@ class RouterOsMikrotikRouterInspector implements MikrotikRouterInspector
 
         return [
             'source_type' => MikrotikImportCandidate::SOURCE_PPPOE,
+            'access_type' => 'fiber',
             'external_id' => $row['.id'] ?? null,
             'identifier' => $row['name'] ?? '',
             'display_name' => $row['name'] ?? null,
@@ -92,6 +93,7 @@ class RouterOsMikrotikRouterInspector implements MikrotikRouterInspector
 
         return [
             'source_type' => MikrotikImportCandidate::SOURCE_SIMPLE_QUEUE,
+            'access_type' => $this->classifyAccess($row['name'] ?? null, $row['comment'] ?? null),
             'external_id' => $row['.id'] ?? null,
             'identifier' => $row['name'] ?? '',
             'display_name' => $row['name'] ?? null,
@@ -112,6 +114,7 @@ class RouterOsMikrotikRouterInspector implements MikrotikRouterInspector
 
         return [
             'source_type' => MikrotikImportCandidate::SOURCE_DHCP_MAC,
+            'access_type' => $this->classifyAccess($row['host-name'] ?? null, $row['comment'] ?? null),
             'external_id' => $row['.id'] ?? null,
             'identifier' => $identifier,
             'display_name' => $row['host-name'] ?? $row['comment'] ?? $identifier,
@@ -134,6 +137,7 @@ class RouterOsMikrotikRouterInspector implements MikrotikRouterInspector
 
         return [
             'source_type' => MikrotikImportCandidate::SOURCE_DHCP_MAC,
+            'access_type' => $this->classifyAccess($identity),
             'external_id' => $row['.id'] ?? null,
             'identifier' => $identifier,
             'display_name' => $identity ?: $identifier,
@@ -153,6 +157,7 @@ class RouterOsMikrotikRouterInspector implements MikrotikRouterInspector
 
         return [
             'source_type' => MikrotikImportCandidate::SOURCE_HOTSPOT,
+            'access_type' => null,
             'external_id' => $row['.id'] ?? null,
             'identifier' => $row['name'] ?? '',
             'display_name' => $row['name'] ?? null,
@@ -182,6 +187,21 @@ class RouterOsMikrotikRouterInspector implements MikrotikRouterInspector
         $withoutMask = explode('/', $first)[0];
 
         return filter_var($withoutMask, FILTER_VALIDATE_IP) ? $withoutMask : null;
+    }
+
+    private function classifyAccess(?string ...$values): ?string
+    {
+        $text = mb_strtoupper(implode(' ', array_filter($values)));
+
+        if (preg_match('/(?:^|[^A-Z])ANTENA(?:[^A-Z]|$)|SISTEMAISP\s*:\s*ANTENA/u', $text)) {
+            return 'antenna';
+        }
+
+        if (preg_match('/(?:^|[^A-Z])FIBRA(?:[^A-Z]|$)|SISTEMAISP\s*:\s*FIBRA/u', $text)) {
+            return 'fiber';
+        }
+
+        return null;
     }
 
     /**

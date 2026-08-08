@@ -71,12 +71,17 @@ class MikrotikImportController extends Controller
             'source_type' => ['nullable', 'in:pppoe,simple_queue,dhcp_mac,hotspot'],
             'search' => ['nullable', 'string', 'max:100'],
             'all' => ['nullable', 'boolean'],
+            'access_type' => ['nullable', 'in:antenna,fiber,unclassified'],
+            'include_unclassified' => ['nullable', 'boolean'],
         ]);
 
         $query = $mikrotikRouter->importCandidates()
             ->with(['client.zone:id,name', 'internetService.plan:id,name'])
             ->when($data['status'] ?? null, fn (Builder $query, string $status) => $query->where('status', $status))
             ->when($data['source_type'] ?? null, fn (Builder $query, string $source) => $query->where('source_type', $source))
+            ->when(($data['access_type'] ?? null) === 'unclassified', fn (Builder $query) => $query->whereNull('access_type'))
+            ->when(in_array($data['access_type'] ?? null, ['antenna', 'fiber'], true), fn (Builder $query) => $query->where('access_type', $data['access_type']))
+            ->when(! ($data['include_unclassified'] ?? false) && ! isset($data['access_type']), fn (Builder $query) => $query->whereNotNull('access_type'))
             ->when($data['search'] ?? null, function (Builder $query, string $search): void {
                 $term = '%'.mb_strtolower($search).'%';
                 $query->where(function (Builder $query) use ($term): void {

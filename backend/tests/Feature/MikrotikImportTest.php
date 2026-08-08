@@ -68,13 +68,23 @@ class MikrotikImportTest extends TestCase
             'status' => MikrotikImportCandidate::STATUS_LINKED,
             'client_id' => $client->id,
             'internet_service_id' => $service->id,
+            'access_type' => 'fiber',
         ]);
         $this->assertDatabaseHas('mikrotik_import_candidates', [
             'mikrotik_router_id' => $router->id,
             'source_type' => MikrotikImportCandidate::SOURCE_SIMPLE_QUEUE,
             'identifier' => 'cliente-juan',
             'status' => MikrotikImportCandidate::STATUS_UNLINKED,
+            'access_type' => null,
         ]);
+
+        $this->getJson("/api/mikrotik-routers/{$router->id}/import-candidates?all=1")
+            ->assertOk()
+            ->assertJsonCount(3, 'data');
+        $this->getJson("/api/mikrotik-routers/{$router->id}/import-candidates?all=1&access_type=unclassified")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.identifier', 'cliente-juan');
     }
 
     public function test_candidate_can_be_linked_to_existing_client_and_creates_imported_service_without_queueing_create_access(): void
@@ -159,10 +169,10 @@ class FakeMikrotikRouterInspector implements MikrotikRouterInspector
     public function importableRecords(MikrotikRouter $router): array
     {
         return [
-            ['source_type' => 'pppoe', 'external_id' => '*1', 'identifier' => 'maria.gomez', 'display_name' => 'maria.gomez', 'profile' => 'plan-20m', 'raw_payload' => ['name' => 'maria.gomez']],
-            ['source_type' => 'pppoe', 'external_id' => '*2', 'identifier' => 'juan.perez', 'display_name' => 'juan.perez', 'profile' => 'plan-30m', 'raw_payload' => ['name' => 'juan.perez']],
+            ['source_type' => 'pppoe', 'access_type' => 'fiber', 'external_id' => '*1', 'identifier' => 'maria.gomez', 'display_name' => 'maria.gomez', 'profile' => 'plan-20m', 'raw_payload' => ['name' => 'maria.gomez']],
+            ['source_type' => 'pppoe', 'access_type' => 'fiber', 'external_id' => '*2', 'identifier' => 'juan.perez', 'display_name' => 'juan.perez', 'profile' => 'plan-30m', 'raw_payload' => ['name' => 'juan.perez']],
             ['source_type' => 'simple_queue', 'external_id' => '*3', 'identifier' => 'cliente-juan', 'display_name' => 'cliente-juan', 'ip_address' => '192.168.10.20', 'rate_limit' => '15M/30M', 'raw_payload' => ['name' => 'cliente-juan']],
-            ['source_type' => 'dhcp_mac', 'external_id' => '*4', 'identifier' => 'AA:BB:CC:DD:EE:01', 'display_name' => 'antena-uno', 'ip_address' => '192.168.20.10', 'mac_address' => 'AA:BB:CC:DD:EE:01', 'raw_payload' => ['mac-address' => 'AA:BB:CC:DD:EE:01']],
+            ['source_type' => 'dhcp_mac', 'access_type' => 'antenna', 'external_id' => '*4', 'identifier' => 'AA:BB:CC:DD:EE:01', 'display_name' => 'antena-uno', 'ip_address' => '192.168.20.10', 'mac_address' => 'AA:BB:CC:DD:EE:01', 'raw_payload' => ['mac-address' => 'AA:BB:CC:DD:EE:01']],
         ];
     }
 }

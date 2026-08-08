@@ -13,7 +13,7 @@ class InternetService extends Model
     use HasFactory;
 
     protected $fillable = [
-        'client_id', 'plan_id', 'status', 'installation_date', 'next_due_date', 'notes',
+        'client_id', 'plan_id', 'status', 'access_type', 'installation_date', 'next_due_date', 'notes',
         'mikrotik_router_id', 'mikrotik_control_method', 'pppoe_username',
         'pppoe_password', 'pppoe_profile', 'simple_queue_name', 'service_ip_address',
         'service_mac_address', 'client_antenna_ip', 'client_antenna_mac',
@@ -21,6 +21,10 @@ class InternetService extends Model
         'technical_notes',
         'suspended_at', 'suspension_reason', 'suspension_notes',
     ];
+
+    public const ACCESS_ANTENNA = 'antenna';
+    public const ACCESS_FIBER = 'fiber';
+    public const ACCESS_TYPES = [self::ACCESS_ANTENNA, self::ACCESS_FIBER];
 
     protected $hidden = ['pppoe_password'];
 

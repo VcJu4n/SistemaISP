@@ -31,6 +31,7 @@ class MikrotikImportService
                     'identifier' => $record['identifier'],
                 ], [
                     'external_id' => $record['external_id'] ?? null,
+                    'access_type' => $record['access_type'] ?? null,
                     'display_name' => $record['display_name'] ?? null,
                     'ip_address' => $record['ip_address'] ?? null,
                     'mac_address' => $record['mac_address'] ?? null,
@@ -93,6 +94,9 @@ class MikrotikImportService
         $service = $this->matchingService($candidate);
 
         if ($service) {
+            if ($service->access_type === null && $candidate->access_type !== null) {
+                $service->update(['access_type' => $candidate->access_type]);
+            }
             $candidate->update([
                 'client_id' => $service->client_id,
                 'internet_service_id' => $service->id,
@@ -144,6 +148,9 @@ class MikrotikImportService
             if ($candidate->source_type === MikrotikImportCandidate::SOURCE_DHCP_MAC) {
                 $existing->update($this->technicalConfig($candidate));
             }
+            if ($existing->access_type === null && $candidate->access_type !== null) {
+                $existing->update(['access_type' => $candidate->access_type]);
+            }
             return $existing;
         }
 
@@ -159,6 +166,7 @@ class MikrotikImportService
             'client_id' => $client->id,
             'plan_id' => $plan->id,
             'status' => 'active',
+            'access_type' => $candidate->access_type,
             'mikrotik_router_id' => $candidate->mikrotik_router_id,
             ...$this->technicalConfig($candidate),
         ]);

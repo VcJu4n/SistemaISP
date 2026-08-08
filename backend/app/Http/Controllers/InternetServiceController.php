@@ -28,6 +28,7 @@ class InternetServiceController extends Controller
             'status' => ['nullable', 'in:active,suspended'],
             'zone_id' => ['nullable', 'integer', 'exists:zones,id'],
             'plan_id' => ['nullable', 'integer', 'exists:plans,id'],
+            'access_type' => ['nullable', 'in:antenna,fiber'],
             'page' => ['nullable', 'integer', 'min:1'],
         ]);
 
@@ -43,6 +44,7 @@ class InternetServiceController extends Controller
             ->when($data['status'] ?? null, fn (Builder $query, string $status) => $query->where('status', $status))
             ->when($data['zone_id'] ?? null, fn (Builder $query, int $zoneId) => $query->whereHas('client', fn (Builder $query) => $query->where('zone_id', $zoneId)))
             ->when($data['plan_id'] ?? null, fn (Builder $query, int $planId) => $query->where('plan_id', $planId))
+            ->when($data['access_type'] ?? null, fn (Builder $query, string $accessType) => $query->where('access_type', $accessType))
             ->latest('id')
             ->paginate(10)
             ->withQueryString();
@@ -236,6 +238,7 @@ class InternetServiceController extends Controller
     {
         return [
             'mikrotik_router_id',
+            'access_type',
             'mikrotik_control_method',
             'pppoe_username',
             'pppoe_profile',

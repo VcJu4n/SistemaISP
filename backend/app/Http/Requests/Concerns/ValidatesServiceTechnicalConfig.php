@@ -18,6 +18,7 @@ trait ValidatesServiceTechnicalConfig
         $requiresPppoePassword = $controlMethod === 'pppoe' && (! $service || $service->pppoe_password === null);
 
         return [
+            'access_type' => ['nullable', Rule::in(['antenna', 'fiber'])],
             'mikrotik_router_id' => [
                 Rule::requiredIf($requiresRouter),
                 'nullable',
@@ -105,6 +106,7 @@ trait ValidatesServiceTechnicalConfig
     public static function normalizeTechnicalConfig(array $data): array
     {
         $fields = [
+            'access_type',
             'mikrotik_router_id',
             'mikrotik_control_method',
             'pppoe_username',
