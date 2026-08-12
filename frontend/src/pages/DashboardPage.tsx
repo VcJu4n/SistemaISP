@@ -1,4 +1,4 @@
-import { Router, Users, Wifi } from 'lucide-react'
+import { ReceiptText, Router, Users, Wifi } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 
@@ -16,6 +16,7 @@ export function DashboardPage() {
         <article className="stat-card"><Users /><div><strong>Clientes</strong><span>Modulo disponible</span></div></article>
         <article className="stat-card"><Router /><div><strong>Routers</strong><span>Modulo disponible</span></div></article>
         <article className="stat-card"><Wifi /><div><strong>Servicios</strong><span>Modulo disponible</span></div></article>
+        <article className="stat-card"><ReceiptText /><div><strong>Recibos</strong><span>Cobranza disponible</span></div></article>
       </div>
 
       <section className="empty-state">
