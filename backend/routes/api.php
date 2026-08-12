@@ -1,10 +1,12 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BillingController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\InternetServiceController;
 use App\Http\Controllers\MikrotikImportController;
 use App\Http\Controllers\MikrotikRouterController;
+use App\Http\Controllers\PaymentReceiptController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\ZoneController;
 use Illuminate\Support\Facades\Route;
@@ -39,4 +41,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('services/{service}/technical-config', [InternetServiceController::class, 'updateTechnicalConfig']);
     Route::post('services/{service}/mikrotik/sync', [InternetServiceController::class, 'syncMikrotik']);
     Route::post('services/{service}/mikrotik-operations/{operation}/retry', [InternetServiceController::class, 'retryMikrotikOperation']);
+    Route::get('billing/services', [BillingController::class, 'services']);
+    Route::get('billing/status', [BillingController::class, 'status']);
+    Route::put('billing/services/{service}', [BillingController::class, 'updateService']);
+    Route::apiResource('receipts', PaymentReceiptController::class)->only(['index', 'store', 'show']);
 });

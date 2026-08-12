@@ -14,6 +14,7 @@ class InternetService extends Model
 
     protected $fillable = [
         'client_id', 'plan_id', 'status', 'installation_date', 'notes',
+        'billing_day', 'cutoff_day', 'grace_days', 'billing_amount', 'billing_enabled',
         'mikrotik_router_id', 'mikrotik_control_method', 'pppoe_username',
         'pppoe_password', 'pppoe_profile', 'simple_queue_name', 'service_ip_address',
         'service_mac_address', 'client_antenna_ip', 'client_antenna_mac',
@@ -30,6 +31,8 @@ class InternetService extends Model
             'installation_date' => 'date:Y-m-d',
             'suspended_at' => 'datetime',
             'pppoe_password' => 'encrypted',
+            'billing_amount' => 'decimal:2',
+            'billing_enabled' => 'boolean',
         ];
     }
 
@@ -38,6 +41,12 @@ class InternetService extends Model
     public function mikrotikRouter(): BelongsTo { return $this->belongsTo(MikrotikRouter::class, 'mikrotik_router_id'); }
     public function histories(): HasMany { return $this->hasMany(ServiceHistory::class)->latest('occurred_at'); }
     public function mikrotikOperations(): HasMany { return $this->hasMany(MikrotikOperation::class); }
+    public function paymentReceipts(): HasMany { return $this->hasMany(PaymentReceipt::class); }
+
+    public function monthlyBillingAmount(): float
+    {
+        return (float) ($this->billing_amount ?? $this->plan?->monthly_price ?? 0);
+    }
 
     public function requiresMikrotikSync(): bool
     {
