@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 300" role="img" aria-labelledby="title desc">
+  <title id="title">SERVI-TEC</title>
+  <desc id="desc">Logo vectorial de SERVI-TEC.</desc>
+  <rect width="760" height="300" fill="#ffffff"/>
+  <defs>
+    <linearGradient id="tileBlue" x1="0" x2="1">
+      <stop offset="0" stop-color="#0b73b8"/>
+      <stop offset="1" stop-color="#51c2e8"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a8fd2"/>
+      <stop offset=".45" stop-color="#ff9f32"/>
+      <stop offset="1" stop-color="#10b981"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(38 26)">
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="150" cy="94" r="76" stroke="url(#ring)" stroke-width="13"/>
+      <path d="M82 121c38 15 78 12 130-18" stroke="#1473aa" stroke-width="5"/>
+      <path d="M91 67c42-18 81-16 121 4" stroke="#5cc9e8" stroke-width="5"/>
+      <path d="M148 20c-34 49-35 102-1 151" stroke="#1473aa" stroke-width="4"/>
+      <path d="M63 92h171" stroke="#83d8eb" stroke-width="4"/>
+      <path d="M111 78c26-24 59-24 83 0" stroke="#0b73b8" stroke-width="9"/>
+      <path d="M124 98c18-16 39-16 56 0" stroke="#ff9f32" stroke-width="9"/>
+      <path d="M137 118c9-8 20-8 30 0" stroke="#0b73b8" stroke-width="9"/>
+    </g>
+    <g transform="translate(78 142)">
+      <rect x="0" y="0" width="120" height="20" rx="4" fill="#0b73b8"/>
+      <path d="M12 10h58c20 0 20 24 0 24H12v-18h58" fill="none" stroke="#06456d" stroke-width="10" stroke-linecap="round"/>
+      <path d="M84 9v45" stroke="#06456d" stroke-width="10" stroke-linecap="round"/>
+      <path d="M65 31h38" stroke="#06456d" stroke-width="10" stroke-linecap="round"/>
+    </g>
+    <g transform="translate(245 35)">
+      <circle cx="58" cy="48" r="29" fill="#f8fbff" stroke="#0b2d4a" stroke-width="5"/>
+      <path d="M31 30c8-17 42-20 55 0" fill="#d8f4f7" stroke="#0b2d4a" stroke-width="4"/>
+      <path d="M29 44h59" stroke="#0b2d4a" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="49" cy="48" r="4" fill="#0b2d4a"/>
+      <circle cx="69" cy="48" r="4" fill="#0b2d4a"/>
+      <path d="M53 57c9 7 19 7 28 0" fill="none" stroke="#0b2d4a" stroke-width="4" stroke-linecap="round"/>
+      <path d="M55 55l-30 10 31 10c8-5 9-14-1-20z" fill="#ff9f32" stroke="#0b2d4a" stroke-width="4"/>
+      <path d="M35 80c8 25 45 30 62 7 20 11 28 36 21 61H30c-5-28-1-52 5-68z" fill="#1f4f68" stroke="#0b2d4a" stroke-width="5"/>
+      <path d="M97 88c22 6 32 24 27 47" fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round"/>
+      <path d="M41 151l-12 17M81 151l-9 17" stroke="#0b2d4a" stroke-width="5" stroke-linecap="round"/>
+      <path d="M21 171h24M61 171h24" stroke="#ff9f32" stroke-width="6" stroke-linecap="round"/>
+      <rect x="45" y="101" width="34" height="27" rx="4" fill="#e8f3f6" stroke="#0b2d4a" stroke-width="4"/>
+      <path d="M58 113h9M63 109v9" stroke="#0b73b8" stroke-width="3" stroke-linecap="round"/>
+      <rect x="86" y="102" width="12" height="36" rx="4" fill="#f3a034" stroke="#0b2d4a" stroke-width="4"/>
+      <path d="M101 101l12-18" stroke="#0b2d4a" stroke-width="5" stroke-linecap="round"/>
+    </g>
+  </g>
+  <g transform="translate(55 214)">
+    <text x="0" y="0" fill="#1473aa" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="900" letter-spacing="2">SERVI-TEC</text>
+    <text x="2" y="38" fill="#1473aa" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="800">SERVICIO DE TELECOMUNICACIONES</text>
+    <text x="118" y="72" fill="#09234a" font-family="Arial, Helvetica, sans-serif" font-size="29" font-weight="900">WIFI - FIBRA OPTICA</text>
+  </g>
+</svg>
