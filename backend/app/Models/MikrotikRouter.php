@@ -2,17 +2,20 @@
 
 namespace App\Models;
 
+use Database\Factories\MikrotikRouterFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class MikrotikRouter extends Model
 {
-    /** @use HasFactory<\Database\Factories\MikrotikRouterFactory> */
+    /** @use HasFactory<MikrotikRouterFactory> */
     use HasFactory;
 
     public const STATUS_PENDING = 'pending';
+
     public const STATUS_CONNECTED = 'connected';
+
     public const STATUS_DISCONNECTED = 'disconnected';
 
     public const CONNECTION_STATUSES = [
@@ -30,6 +33,7 @@ class MikrotikRouter extends Model
         'use_ssl',
         'active',
         'connection_status',
+        'last_checked_at',
         'last_successful_connection_at',
         'last_error',
     ];
@@ -42,6 +46,7 @@ class MikrotikRouter extends Model
             'password' => 'encrypted',
             'use_ssl' => 'boolean',
             'active' => 'boolean',
+            'last_checked_at' => 'datetime',
             'last_successful_connection_at' => 'datetime',
         ];
     }

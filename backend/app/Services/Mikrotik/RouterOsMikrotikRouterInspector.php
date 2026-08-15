@@ -28,6 +28,11 @@ class RouterOsMikrotikRouterInspector implements MikrotikRouterInspector
     {
         return collect($this->recordsBySource($router))
             ->flatMap(fn (array $records) => $records)
+            ->filter(fn (array $record) => in_array(
+                $record['classification'] ?? null,
+                [MikrotikImportCandidate::CLASSIFICATION_SERVICE, MikrotikImportCandidate::CLASSIFICATION_ANTENNA],
+                true,
+            ))
             ->values()
             ->all();
     }
@@ -65,6 +70,7 @@ class RouterOsMikrotikRouterInspector implements MikrotikRouterInspector
     {
         return [
             'source_type' => MikrotikImportCandidate::SOURCE_PPPOE,
+            'classification' => MikrotikImportCandidate::CLASSIFICATION_SERVICE,
             'external_id' => $row['.id'] ?? null,
             'identifier' => $row['name'] ?? '',
             'display_name' => $row['name'] ?? null,
@@ -83,6 +89,7 @@ class RouterOsMikrotikRouterInspector implements MikrotikRouterInspector
 
         return [
             'source_type' => MikrotikImportCandidate::SOURCE_SIMPLE_QUEUE,
+            'classification' => MikrotikImportCandidate::CLASSIFICATION_SERVICE,
             'external_id' => $row['.id'] ?? null,
             'identifier' => $row['name'] ?? '',
             'display_name' => $row['name'] ?? null,
@@ -99,12 +106,18 @@ class RouterOsMikrotikRouterInspector implements MikrotikRouterInspector
     private function dhcpRecord(array $row): array
     {
         $identifier = $row['mac-address'] ?? '';
+        $comment = trim((string) ($row['comment'] ?? ''));
+        $dynamic = filter_var($row['dynamic'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $isAntenna = ! $dynamic && preg_match('/^(CPE|CLIENTE)-/i', $comment) === 1;
 
         return [
             'source_type' => MikrotikImportCandidate::SOURCE_DHCP_MAC,
+            'classification' => $isAntenna
+                ? MikrotikImportCandidate::CLASSIFICATION_ANTENNA
+                : MikrotikImportCandidate::CLASSIFICATION_DEVICE,
             'external_id' => $row['.id'] ?? null,
             'identifier' => $identifier,
-            'display_name' => $row['host-name'] ?? $row['comment'] ?? $identifier,
+            'display_name' => $comment !== '' ? $comment : ($row['host-name'] ?? $identifier),
             'ip_address' => $row['address'] ?? null,
             'mac_address' => $row['mac-address'] ?? null,
             'raw_payload' => $row,
@@ -119,6 +132,7 @@ class RouterOsMikrotikRouterInspector implements MikrotikRouterInspector
     {
         return [
             'source_type' => MikrotikImportCandidate::SOURCE_HOTSPOT,
+            'classification' => MikrotikImportCandidate::CLASSIFICATION_DEVICE,
             'external_id' => $row['.id'] ?? null,
             'identifier' => $row['name'] ?? '',
             'display_name' => $row['name'] ?? null,

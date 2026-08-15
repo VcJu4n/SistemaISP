@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Contracts\MikrotikRouterConnectionTester;
+use App\Models\InternetService;
 use App\Models\MikrotikRouter;
 use App\Models\User;
 use App\Services\Mikrotik\RouterOsApiClient;
@@ -74,6 +75,22 @@ class MikrotikRouterTest extends TestCase
             ->assertJsonMissingPath('data.0.password');
     }
 
+    public function test_router_detail_lists_only_its_clients_and_service_counts(): void
+    {
+        $router = MikrotikRouter::factory()->create();
+        InternetService::factory()->create(['mikrotik_router_id' => $router, 'status' => 'active']);
+        InternetService::factory()->create(['mikrotik_router_id' => $router, 'status' => 'suspended']);
+        InternetService::factory()->create(['mikrotik_router_id' => MikrotikRouter::factory()]);
+
+        $this->getJson("/api/mikrotik-routers/{$router->id}")
+            ->assertOk()
+            ->assertJsonCount(2, 'data.services')
+            ->assertJsonPath('data.services_count', 2)
+            ->assertJsonPath('data.active_services_count', 1)
+            ->assertJsonPath('data.suspended_services_count', 1)
+            ->assertJsonStructure(['data' => ['services' => [['client', 'plan']]]]);
+    }
+
     public function test_connection_test_marks_router_as_connected(): void
     {
         $router = MikrotikRouter::factory()->create(['connection_status' => MikrotikRouter::STATUS_PENDING]);
@@ -86,6 +103,7 @@ class MikrotikRouterTest extends TestCase
             ->assertJsonMissingPath('data.password');
 
         $this->assertNotNull($router->fresh()->last_successful_connection_at);
+        $this->assertNotNull($router->fresh()->last_checked_at);
     }
 
     public function test_connection_test_records_last_error_when_disconnected(): void
@@ -103,6 +121,26 @@ class MikrotikRouterTest extends TestCase
             ->assertJsonMissingPath('data.password');
 
         $this->assertNotNull($router->fresh()->last_successful_connection_at);
+        $this->assertNotNull($router->fresh()->last_checked_at);
+    }
+
+    public function test_monitor_checks_all_active_routers_independently(): void
+    {
+        $connected = MikrotikRouter::factory()->create(['name' => 'Router disponible', 'active' => true]);
+        $disconnected = MikrotikRouter::factory()->create(['name' => 'Router sin ruta', 'active' => true]);
+        $inactive = MikrotikRouter::factory()->create(['name' => 'Router apagado', 'active' => false]);
+        $this->app->bind(MikrotikRouterConnectionTester::class, IndependentRouterTester::class);
+
+        $this->artisan('mikrotik:check-routers')
+            ->expectsOutputToContain('Checked: 2, connected: 1, disconnected: 1.')
+            ->assertSuccessful();
+
+        $this->assertSame(MikrotikRouter::STATUS_CONNECTED, $connected->fresh()->connection_status);
+        $this->assertSame(MikrotikRouter::STATUS_DISCONNECTED, $disconnected->fresh()->connection_status);
+        $this->assertSame('No route to host', $disconnected->fresh()->last_error);
+        $this->assertNotNull($connected->fresh()->last_checked_at);
+        $this->assertNotNull($disconnected->fresh()->last_checked_at);
+        $this->assertNull($inactive->fresh()->last_checked_at);
     }
 
     public function test_router_name_and_endpoint_must_be_unique(): void
@@ -155,6 +193,16 @@ class FailingRouterTester implements MikrotikRouterConnectionTester
     public function test(MikrotikRouter $router): MikrotikConnectionResult
     {
         return MikrotikConnectionResult::disconnected('No route to host');
+    }
+}
+
+class IndependentRouterTester implements MikrotikRouterConnectionTester
+{
+    public function test(MikrotikRouter $router): MikrotikConnectionResult
+    {
+        return $router->name === 'Router disponible'
+            ? MikrotikConnectionResult::connected()
+            : MikrotikConnectionResult::disconnected('No route to host');
     }
 }
 

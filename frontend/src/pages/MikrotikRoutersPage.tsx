@@ -1,4 +1,4 @@
-import { Ban, CheckCircle2, Download, Link2, Pencil, Plus, Radar, Router, Search, ShieldCheck, TestTube2, UserPlus, X, XCircle } from 'lucide-react'
+import { Ban, CheckCircle2, Download, Eye, Link2, Pencil, Plus, Radar, Router, Search, ShieldCheck, TestTube2, UserPlus, X, XCircle } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { api, getApiError } from '../lib/api'
 
@@ -13,16 +13,31 @@ type MikrotikRouter = {
   use_ssl: boolean
   active: boolean
   connection_status: ConnectionStatus
+  last_checked_at: string | null
   last_successful_connection_at: string | null
   last_error: string | null
   services_count?: number
   pending_operations_count?: number
+  active_services_count?: number
+  suspended_services_count?: number
+  services?: RouterService[]
+}
+
+type RouterService = {
+  id: number
+  status: 'active' | 'suspended'
+  mikrotik_control_method: 'manual' | 'pppoe' | 'simple_queue'
+  pppoe_username: string | null
+  service_ip_address: string | null
+  client: { id: number; full_name: string; document: string; phone: string; zone: { id: number; name: string } }
+  plan: { id: number; name: string } | null
 }
 
 type Meta = { current_page: number; last_page: number; total: number }
 type SourceType = 'pppoe' | 'simple_queue' | 'dhcp_mac' | 'hotspot'
 type CandidateStatus = 'unlinked' | 'linked' | 'ignored'
-type MikrotikCandidate = { id: number; source_type: SourceType; identifier: string; display_name: string | null; ip_address: string | null; mac_address: string | null; profile: string | null; rate_limit: string | null; status: CandidateStatus; last_seen_at: string; client?: { id: number; full_name: string } | null; internet_service?: { id: number; plan?: { id: number; name: string } | null } | null }
+type CandidateClassification = 'service' | 'antenna' | 'device'
+type MikrotikCandidate = { id: number; source_type: SourceType; classification: CandidateClassification; identifier: string; display_name: string | null; ip_address: string | null; mac_address: string | null; profile: string | null; rate_limit: string | null; status: CandidateStatus; last_seen_at: string; client?: { id: number; full_name: string } | null; internet_service?: { id: number; plan?: { id: number; name: string } | null } | null }
 type ClientOption = { id: number; full_name: string; document: string; zone_id: number; internet_service_exists?: boolean; zone: { id: number; name: string } }
 type ZoneOption = { id: number; name: string; active: boolean }
 type PlanOption = { id: number; name: string; active: boolean; zones: ZoneOption[] }
@@ -48,6 +63,7 @@ export function MikrotikRoutersPage() {
   const [testingId, setTestingId] = useState<number | null>(null)
   const [detectingId, setDetectingId] = useState<number | null>(null)
   const [importRouter, setImportRouter] = useState<MikrotikRouter | null>(null)
+  const [detailRouter, setDetailRouter] = useState<MikrotikRouter | null>(null)
 
   useEffect(() => {
     const timer = setTimeout(() => { setDebounced(search); setPage(1) }, 300)
@@ -80,6 +96,11 @@ export function MikrotikRoutersPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load()
+  }, [load])
+
+  useEffect(() => {
+    const interval = window.setInterval(() => void load(), 30_000)
+    return () => window.clearInterval(interval)
   }, [load])
 
   const counters = useMemo(() => ({
@@ -126,6 +147,16 @@ export function MikrotikRoutersPage() {
     setMessage(text)
     setError('')
     await load()
+  }
+
+  const openDetail = async (router: MikrotikRouter) => {
+    setError('')
+    try {
+      const response = await api.get<{ data: MikrotikRouter }>('/mikrotik-routers/' + router.id)
+      setDetailRouter(response.data.data)
+    } catch (requestError) {
+      setError(getApiError(requestError))
+    }
   }
 
   return (
@@ -181,7 +212,7 @@ export function MikrotikRoutersPage() {
                   <th>Usuario</th>
                   <th>Conexion</th>
                   <th>Servicios</th>
-                  <th>Ultimo acceso</th>
+                  <th>Última verificación</th>
                   <th aria-label="Acciones" />
                 </tr>
               </thead>
@@ -203,7 +234,7 @@ export function MikrotikRoutersPage() {
                     <td>{router.username}</td>
                     <td>
                       <div className="connection-cell">
-                        <span className={'status-badge ' + router.connection_status}>{statusLabels[router.connection_status]}</span>
+                        <span className={'status-badge ' + (router.active ? router.connection_status : 'pending')}>{router.active ? statusLabels[router.connection_status] : 'Inactivo'}</span>
                         {router.last_error && <small title={router.last_error}>{router.last_error}</small>}
                       </div>
                     </td>
@@ -213,11 +244,12 @@ export function MikrotikRoutersPage() {
                         <span>{router.pending_operations_count ?? 0} pendientes/fallidas</span>
                       </div>
                     </td>
-                    <td>{formatDate(router.last_successful_connection_at)}</td>
+                    <td><div className="router-counts"><strong>{formatDate(router.last_checked_at)}</strong><span>Último éxito: {formatDate(router.last_successful_connection_at)}</span></div></td>
                     <td>
                       <div className="row-actions">
+                        <button title="Ver clientes y servicios" onClick={() => void openDetail(router)}><Eye size={17} /></button>
                         <button title="Editar" onClick={() => setEditing(router)}><Pencil size={17} /></button>
-                        <button title="Probar conexion" disabled={testingId === router.id} onClick={() => void testConnection(router)}>
+                        <button title="Probar conexion" disabled={!router.active || testingId === router.id} onClick={() => void testConnection(router)}>
                           <TestTube2 size={17} />
                         </button>
                         <button title="Detectar metodo" disabled={detectingId === router.id} onClick={() => void detectControlMethod(router)}>
@@ -251,8 +283,15 @@ export function MikrotikRoutersPage() {
         />
       )}
       {importRouter && <MikrotikImportModal router={importRouter} onClose={() => setImportRouter(null)} />}
+      {detailRouter && <MikrotikRouterDetailModal router={detailRouter} onClose={() => setDetailRouter(null)} />}
     </section>
   )
+}
+
+function MikrotikRouterDetailModal({ router, onClose }: { router: MikrotikRouter; onClose: () => void }) {
+  const services = router.services ?? []
+
+  return <div className="modal-backdrop"><section className="modal-card modal-wide"><header><div><span className="eyebrow">Clientes por MikroTik</span><h2>{router.name}</h2></div><button className="modal-close" onClick={onClose}><X /></button></header><div className="router-health"><article><CheckCircle2 /><div><strong>{router.active_services_count ?? 0}</strong><span>Activos</span></div></article><article><XCircle /><div><strong>{router.suspended_services_count ?? 0}</strong><span>Suspendidos</span></div></article><article><ShieldCheck /><div><strong>{router.pending_operations_count ?? 0}</strong><span>Pendientes/fallidas</span></div></article></div>{services.length === 0 ? <div className="table-message"><Router /><strong>Este MikroTik no tiene servicios asignados</strong></div> : <div className="table-scroll"><table><thead><tr><th>Cliente</th><th>Zona</th><th>Plan</th><th>Método</th><th>Usuario / IP</th><th>Estado</th></tr></thead><tbody>{services.map((service) => <tr key={service.id}><td><strong>{service.client.full_name}</strong><small>{service.client.document} · {service.client.phone}</small></td><td>{service.client.zone.name}</td><td>{service.plan?.name ?? 'Sin plan'}</td><td>{service.mikrotik_control_method === 'pppoe' ? 'PPPoE' : service.mikrotik_control_method === 'simple_queue' ? 'Simple Queue' : 'Manual'}</td><td>{service.pppoe_username || service.service_ip_address || '-'}</td><td><span className={`status-badge ${service.status}`}>{service.status === 'active' ? 'Activo' : 'Suspendido'}</span></td></tr>)}</tbody></table></div>}<footer className="form-actions"><button className="button button-secondary" onClick={onClose}>Cerrar</button></footer></section></div>
 }
 
 function MikrotikImportModal({ router, onClose }: { router: MikrotikRouter; onClose: () => void }) {
@@ -262,6 +301,7 @@ function MikrotikImportModal({ router, onClose }: { router: MikrotikRouter; onCl
   const [plans, setPlans] = useState<PlanOption[]>([])
   const [status, setStatus] = useState('')
   const [source, setSource] = useState('')
+  const [classification, setClassification] = useState('service')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -273,7 +313,7 @@ function MikrotikImportModal({ router, onClose }: { router: MikrotikRouter; onCl
     setLoading(true)
     try {
       const [candidateResponse, clientResponse, zoneResponse, planResponse] = await Promise.all([
-        api.get<{ data: MikrotikCandidate[] }>('/mikrotik-routers/' + router.id + '/import-candidates', { params: { all: 1, status: status || undefined, source_type: source || undefined } }),
+        api.get<{ data: MikrotikCandidate[] }>('/mikrotik-routers/' + router.id + '/import-candidates', { params: { all: 1, status: status || undefined, source_type: source || undefined, classification } }),
         api.get<{ data: ClientOption[] }>('/clients', { params: { all: 1, status: 'active' } }),
         api.get<{ data: ZoneOption[] }>('/zones', { params: { all: 1 } }),
         api.get<{ data: PlanOption[] }>('/plans', { params: { all: 1, active: 1 } }),
@@ -285,7 +325,7 @@ function MikrotikImportModal({ router, onClose }: { router: MikrotikRouter; onCl
     } finally {
       setLoading(false)
     }
-  }, [router.id, source, status])
+  }, [classification, router.id, source, status])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -319,7 +359,7 @@ function MikrotikImportModal({ router, onClose }: { router: MikrotikRouter; onCl
     }
   }
 
-  return <div className="modal-backdrop"><section className="modal-card modal-wide import-modal"><header><div><span className="eyebrow">HU-031</span><h2>Importar desde {router.name}</h2></div><button className="modal-close" onClick={onClose}><X /></button></header>{message && <div className="alert alert-success">{message}</div>}{error && <div className="alert alert-error">{error}</div>}<div className="import-toolbar"><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="">Todos</option><option value="unlinked">Sin relacionar</option><option value="linked">Vinculados</option><option value="ignored">Ignorados</option></select><select value={source} onChange={(event) => setSource(event.target.value)}><option value="">Todos los origenes</option><option value="pppoe">PPPoE</option><option value="simple_queue">Simple Queue</option><option value="dhcp_mac">DHCP/MAC</option><option value="hotspot">Hotspot</option></select><button className="button button-primary button-fit" disabled={syncing} onClick={() => void sync()}><Download size={17} /> {syncing ? 'Leyendo...' : 'Leer MikroTik'}</button></div>{loading ? <div className="table-message">Cargando registros...</div> : <div className="import-list">{candidates.length ? candidates.map((candidate) => <article key={candidate.id}><div><strong>{candidate.display_name || candidate.identifier}</strong><span>{sourceLabel(candidate.source_type)} - {candidate.identifier}</span><small>{candidate.ip_address || candidate.mac_address || candidate.profile || 'Sin dato tecnico adicional'}</small>{candidate.client && <small>Vinculado a {candidate.client.full_name}</small>}</div><span className={`status-badge ${candidate.status}`}>{candidateStatusLabel(candidate.status)}</span><div className="row-actions"><button title="Vincular" disabled={candidate.status === 'ignored'} onClick={() => setLinking(candidate)}><Link2 size={17} /></button><button title="Crear cliente" disabled={candidate.status === 'ignored'} onClick={() => setCreating(candidate)}><UserPlus size={17} /></button><button className="danger" title="Ignorar" onClick={() => void ignore(candidate)}><Ban size={17} /></button></div></article>) : <div className="table-message"><Download /><strong>No hay registros leidos</strong></div>}</div>}{linking && <LinkCandidateModal candidate={linking} clients={clients} plans={plans} onClose={() => setLinking(null)} onSaved={async () => { setLinking(null); setMessage('Registro vinculado correctamente.'); await load() }} onError={setError} />}{creating && <CreateCandidateClientModal candidate={creating} zones={zones.filter((zone) => zone.active)} plans={plans} onClose={() => setCreating(null)} onSaved={async () => { setCreating(null); setMessage('Cliente importado correctamente.'); await load() }} onError={setError} />}</section></div>
+  return <div className="modal-backdrop"><section className="modal-card modal-wide import-modal"><header><div><span className="eyebrow">HU-031</span><h2>Importar desde {router.name}</h2></div><button className="modal-close" onClick={onClose}><X /></button></header>{message && <div className="alert alert-success">{message}</div>}{error && <div className="alert alert-error">{error}</div>}<div className="import-toolbar"><select value={classification} onChange={(event) => { setClassification(event.target.value); setSource('') }}><option value="service">Servicios PPPoE / Queue</option><option value="antenna">Posibles antenas</option><option value="all">Ver todos los dispositivos</option></select><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="">Todos</option><option value="unlinked">Sin relacionar</option><option value="linked">Vinculados</option><option value="ignored">Ignorados</option></select><select value={source} onChange={(event) => setSource(event.target.value)}><option value="">Todos los origenes</option><option value="pppoe">PPPoE</option><option value="simple_queue">Simple Queue</option><option value="dhcp_mac">DHCP/MAC</option><option value="hotspot">Hotspot</option></select><button className="button button-primary button-fit" disabled={syncing} onClick={() => void sync()}><Download size={17} /> {syncing ? 'Leyendo...' : 'Leer MikroTik'}</button></div>{loading ? <div className="table-message">Cargando registros...</div> : <div className="import-list">{candidates.length ? candidates.map((candidate) => <article key={candidate.id}><div><strong>{candidate.display_name || candidate.identifier}</strong><span>{classificationLabel(candidate.classification)} · {sourceLabel(candidate.source_type)} - {candidate.identifier}</span><small>{candidate.ip_address || candidate.mac_address || candidate.profile || 'Sin dato tecnico adicional'}</small>{candidate.client && <small>Vinculado a {candidate.client.full_name}</small>}</div><span className={`status-badge ${candidate.status}`}>{candidateStatusLabel(candidate.status)}</span><div className="row-actions"><button title="Vincular" disabled={candidate.status === 'ignored'} onClick={() => setLinking(candidate)}><Link2 size={17} /></button><button title="Crear cliente" disabled={candidate.status === 'ignored'} onClick={() => setCreating(candidate)}><UserPlus size={17} /></button><button className="danger" title="Ignorar" onClick={() => void ignore(candidate)}><Ban size={17} /></button></div></article>) : <div className="table-message"><Download /><strong>No hay registros en esta categoría</strong></div>}</div>}{linking && <LinkCandidateModal candidate={linking} clients={clients} plans={plans} onClose={() => setLinking(null)} onSaved={async () => { setLinking(null); setMessage('Registro vinculado correctamente.'); await load() }} onError={setError} />}{creating && <CreateCandidateClientModal candidate={creating} zones={zones.filter((zone) => zone.active)} plans={plans} onClose={() => setCreating(null)} onSaved={async () => { setCreating(null); setMessage('Cliente importado correctamente.'); await load() }} onError={setError} />}</section></div>
 }
 
 function LinkCandidateModal({ candidate, clients, plans, onClose, onSaved, onError }: { candidate: MikrotikCandidate; clients: ClientOption[]; plans: PlanOption[]; onClose: () => void; onSaved: () => Promise<void>; onError: (message: string) => void }) {
@@ -379,6 +419,11 @@ function sourceLabel(source: string): string {
 function candidateStatusLabel(status: CandidateStatus): string {
   const labels: Record<CandidateStatus, string> = { unlinked: 'Sin relacionar', linked: 'Vinculado', ignored: 'Ignorado' }
   return labels[status]
+}
+
+function classificationLabel(classification: CandidateClassification): string {
+  const labels: Record<CandidateClassification, string> = { service: 'Servicio', antenna: 'Posible antena', device: 'Otro dispositivo' }
+  return labels[classification]
 }
 
 function MikrotikRouterModal({ router, onClose, onSaved }: { router: MikrotikRouter | null; onClose: () => void; onSaved: (text: string) => Promise<void> }) {
@@ -480,7 +525,7 @@ function MikrotikRouterModal({ router, onClose, onSaved }: { router: MikrotikRou
 }
 
 function formatDate(value: string | null): string {
-  if (!value) return 'Sin acceso correcto'
+  if (!value) return 'Sin verificar'
 
   return new Date(value).toLocaleString('es-BO')
 }

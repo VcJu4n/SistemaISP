@@ -12,3 +12,8 @@ Schedule::command('mikrotik:process-pending --retry-failed')
     ->everyMinute()
     ->withoutOverlapping()
     ->when(fn (): bool => (bool) config('mikrotik.operations.enabled'));
+
+Schedule::command('mikrotik:check-routers')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->when(fn (): bool => (bool) config('mikrotik.monitoring.enabled'));

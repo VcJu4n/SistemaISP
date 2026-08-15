@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Contracts\MikrotikRouterConnectionTester;
 use App\Http\Requests\StoreMikrotikRouterRequest;
 use App\Http\Requests\UpdateMikrotikRouterRequest;
 use App\Models\MikrotikRouter;
+use App\Services\Mikrotik\MikrotikRouterHealthMonitor;
 use App\Services\Mikrotik\RouterOsApiClient;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -64,8 +64,14 @@ class MikrotikRouterController extends Controller
     public function show(MikrotikRouter $mikrotikRouter): JsonResponse
     {
         return response()->json([
-            'data' => $mikrotikRouter->loadCount([
+            'data' => $mikrotikRouter->load([
+                'services' => fn ($query) => $query
+                    ->with(['client.zone:id,name', 'plan:id,name'])
+                    ->latest('id'),
+            ])->loadCount([
                 'services',
+                'services as active_services_count' => fn (Builder $query) => $query->where('status', 'active'),
+                'services as suspended_services_count' => fn (Builder $query) => $query->where('status', 'suspended'),
                 'operations as pending_operations_count' => fn (Builder $query) => $query->whereIn('status', ['pending', 'failed']),
             ]),
         ]);
@@ -90,15 +96,9 @@ class MikrotikRouterController extends Controller
         return response()->json(['message' => 'MikroTik actualizado correctamente.', 'data' => $mikrotikRouter->fresh()]);
     }
 
-    public function testConnection(MikrotikRouter $mikrotikRouter, MikrotikRouterConnectionTester $tester): JsonResponse
+    public function testConnection(MikrotikRouter $mikrotikRouter, MikrotikRouterHealthMonitor $monitor): JsonResponse
     {
-        $result = $tester->test($mikrotikRouter);
-
-        $mikrotikRouter->update([
-            'connection_status' => $result->connected ? MikrotikRouter::STATUS_CONNECTED : MikrotikRouter::STATUS_DISCONNECTED,
-            'last_successful_connection_at' => $result->connected ? now() : $mikrotikRouter->last_successful_connection_at,
-            'last_error' => $result->connected ? null : $result->error,
-        ]);
+        $result = $monitor->check($mikrotikRouter);
 
         return response()->json([
             'message' => $result->connected ? 'Conexion con MikroTik correcta.' : 'No se pudo conectar con MikroTik.',
