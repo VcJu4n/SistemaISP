@@ -69,6 +69,7 @@ class MikrotikImportController extends Controller
         $data = $request->validate([
             'status' => ['nullable', 'in:unlinked,linked,ignored'],
             'source_type' => ['nullable', 'in:pppoe,simple_queue,dhcp_mac,hotspot'],
+            'classification' => ['nullable', 'in:service,antenna,device,all'],
             'search' => ['nullable', 'string', 'max:100'],
             'all' => ['nullable', 'boolean'],
         ]);
@@ -77,6 +78,8 @@ class MikrotikImportController extends Controller
             ->with(['client.zone:id,name', 'internetService.plan:id,name'])
             ->when($data['status'] ?? null, fn (Builder $query, string $status) => $query->where('status', $status))
             ->when($data['source_type'] ?? null, fn (Builder $query, string $source) => $query->where('source_type', $source))
+            ->when(($data['classification'] ?? 'service') !== 'all', fn (Builder $query) => $query
+                ->where('classification', $data['classification'] ?? 'service'))
             ->when($data['search'] ?? null, function (Builder $query, string $search): void {
                 $term = '%'.mb_strtolower($search).'%';
                 $query->where(function (Builder $query) use ($term): void {

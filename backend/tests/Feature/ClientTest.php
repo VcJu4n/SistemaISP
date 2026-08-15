@@ -3,10 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\Client;
+use App\Models\InternetService;
+use App\Models\MikrotikRouter;
+use App\Models\Plan;
 use App\Models\User;
 use App\Models\Zone;
-use App\Models\InternetService;
-use App\Models\Plan;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -27,6 +28,9 @@ class ClientTest extends TestCase
 
         $this->assertDatabaseHas('clients', [
             'document' => '7894561',
+            'location_reference' => 'Casa azul frente a la cancha',
+            'latitude' => '-17.3895000',
+            'longitude' => '-66.1568000',
             'status' => 'active',
         ]);
     }
@@ -82,6 +86,27 @@ class ClientTest extends TestCase
             ->assertJsonPath('data.0.zone.name', 'Norte');
     }
 
+    public function test_clients_can_be_filtered_by_mikrotik_or_without_mikrotik(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+        $router = MikrotikRouter::factory()->create();
+        $assigned = Client::factory()->create();
+        $unassigned = Client::factory()->create();
+        InternetService::factory()->create(['client_id' => $assigned, 'plan_id' => Plan::factory(), 'mikrotik_router_id' => $router]);
+        InternetService::factory()->create(['client_id' => $unassigned, 'plan_id' => Plan::factory(), 'mikrotik_router_id' => null, 'mikrotik_control_method' => 'manual']);
+
+        $this->getJson("/api/clients?mikrotik_router_id={$router->id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $assigned->id)
+            ->assertJsonPath('data.0.internet_service.mikrotik_router.name', $router->name);
+
+        $this->getJson('/api/clients?without_mikrotik=1')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $unassigned->id);
+    }
+
     public function test_archiving_a_client_uses_soft_deletes(): void
     {
         Sanctum::actingAs(User::factory()->create());
@@ -123,6 +148,9 @@ class ClientTest extends TestCase
             'phone' => '71234567',
             'email' => 'ana@example.com',
             'address' => 'Av. Principal 123',
+            'location_reference' => 'Casa azul frente a la cancha',
+            'latitude' => -17.3895,
+            'longitude' => -66.1568,
             'zone_id' => $zone->id,
             'installation_date' => '2026-07-30',
         ];

@@ -6,6 +6,10 @@ return [
         'ssl_verify_peer' => env('MIKROTIK_SSL_VERIFY_PEER', false),
     ],
 
+    'monitoring' => [
+        'enabled' => env('MIKROTIK_MONITORING_ENABLED', true),
+    ],
+
     'operations' => [
         'enabled' => env('MIKROTIK_OPERATION_PROCESSING_ENABLED', false),
         'batch_size' => env('MIKROTIK_OPERATION_BATCH_SIZE', 20),

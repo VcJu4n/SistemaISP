@@ -2,22 +2,34 @@
 
 namespace App\Models;
 
+use Database\Factories\MikrotikImportCandidateFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class MikrotikImportCandidate extends Model
 {
-    /** @use HasFactory<\Database\Factories\MikrotikImportCandidateFactory> */
+    /** @use HasFactory<MikrotikImportCandidateFactory> */
     use HasFactory;
 
     public const SOURCE_PPPOE = 'pppoe';
+
     public const SOURCE_SIMPLE_QUEUE = 'simple_queue';
+
     public const SOURCE_DHCP_MAC = 'dhcp_mac';
+
     public const SOURCE_HOTSPOT = 'hotspot';
 
+    public const CLASSIFICATION_SERVICE = 'service';
+
+    public const CLASSIFICATION_ANTENNA = 'antenna';
+
+    public const CLASSIFICATION_DEVICE = 'device';
+
     public const STATUS_UNLINKED = 'unlinked';
+
     public const STATUS_LINKED = 'linked';
+
     public const STATUS_IGNORED = 'ignored';
 
     public const SOURCES = [
@@ -38,6 +50,7 @@ class MikrotikImportCandidate extends Model
         'client_id',
         'internet_service_id',
         'source_type',
+        'classification',
         'external_id',
         'identifier',
         'display_name',

@@ -31,6 +31,7 @@ class MikrotikImportService
                     'identifier' => $record['identifier'],
                 ], [
                     'external_id' => $record['external_id'] ?? null,
+                    'classification' => $record['classification'] ?? MikrotikImportCandidate::CLASSIFICATION_DEVICE,
                     'display_name' => $record['display_name'] ?? null,
                     'ip_address' => $record['ip_address'] ?? null,
                     'mac_address' => $record['mac_address'] ?? null,
@@ -98,6 +99,7 @@ class MikrotikImportService
                 'internet_service_id' => $service->id,
                 'status' => MikrotikImportCandidate::STATUS_LINKED,
             ]);
+
             return;
         }
 
@@ -133,6 +135,7 @@ class MikrotikImportService
 
         if ($existing) {
             $this->assertCandidateMatchesService($candidate, $existing);
+
             return $existing;
         }
 

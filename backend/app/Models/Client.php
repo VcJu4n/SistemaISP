@@ -2,15 +2,16 @@
 
 namespace App\Models;
 
+use Database\Factories\ClientFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Client extends Model
 {
-    /** @use HasFactory<\Database\Factories\ClientFactory> */
+    /** @use HasFactory<ClientFactory> */
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
@@ -19,6 +20,9 @@ class Client extends Model
         'phone',
         'email',
         'address',
+        'location_reference',
+        'latitude',
+        'longitude',
         'zone_id',
         'installation_date',
         'status',
@@ -28,6 +32,8 @@ class Client extends Model
     {
         return [
             'installation_date' => 'date:Y-m-d',
+            'latitude' => 'decimal:7',
+            'longitude' => 'decimal:7',
         ];
     }
 
