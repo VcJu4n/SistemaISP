@@ -42,6 +42,7 @@ class InternetService extends Model
     public function histories(): HasMany { return $this->hasMany(ServiceHistory::class)->latest('occurred_at'); }
     public function mikrotikOperations(): HasMany { return $this->hasMany(MikrotikOperation::class); }
     public function paymentReceipts(): HasMany { return $this->hasMany(PaymentReceipt::class); }
+    public function billingCharges(): HasMany { return $this->hasMany(BillingCharge::class); }
 
     public function monthlyBillingAmount(): float
     {

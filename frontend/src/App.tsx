@@ -7,7 +7,7 @@ import { LoginPage } from './pages/LoginPage'
 import { ClientsPage } from './pages/ClientsPage'
 import { CatalogsPage } from './pages/CatalogsPage'
 import { MikrotikRoutersPage } from './pages/MikrotikRoutersPage'
-import { ReceiptsPage } from './pages/ReceiptsPage'
+import { PaymentsPage, ReceiptsPage } from './pages/ReceiptsPage'
 import { ServicesPage } from './pages/ServicesPage'
 import { useAuth } from './auth/useAuth'
 
@@ -26,6 +26,7 @@ function App() {
           <Route path="/clientes" element={<ClientsPage />} />
           <Route path="/catalogos" element={<CatalogsPage />} />
           <Route path="/servicios" element={<ServicesPage />} />
+          <Route path="/pagos" element={<PaymentsPage />} />
           <Route path="/recibos" element={<ReceiptsPage />} />
           <Route path="/mikrotik" element={<MikrotikRoutersPage />} />
         </Route>

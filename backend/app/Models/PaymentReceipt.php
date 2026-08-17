@@ -15,6 +15,7 @@ class PaymentReceipt extends Model
 
     protected $fillable = [
         'receipt_number',
+        'billing_charge_id',
         'internet_service_id',
         'client_id',
         'created_by',
@@ -55,6 +56,11 @@ class PaymentReceipt extends Model
     public function internetService(): BelongsTo
     {
         return $this->belongsTo(InternetService::class);
+    }
+
+    public function billingCharge(): BelongsTo
+    {
+        return $this->belongsTo(BillingCharge::class);
     }
 
     public function client(): BelongsTo

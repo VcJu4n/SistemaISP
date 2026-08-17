@@ -14,14 +14,11 @@ class StorePaymentReceiptRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'internet_service_id' => ['required', 'integer', 'exists:internet_services,id'],
+            'billing_charge_id' => ['required', 'integer', 'exists:billing_charges,id'],
             'payment_date' => ['required', 'date'],
-            'cutoff_date' => ['nullable', 'date'],
-            'billing_period' => ['nullable', 'string', 'max:120'],
-            'concept' => ['required', 'string', 'max:255'],
             'observations' => ['nullable', 'string', 'max:1000'],
             'currency' => ['nullable', 'string', 'max:30'],
-            'subtotal' => ['required', 'numeric', 'min:0'],
+            'payment_amount' => ['nullable', 'numeric', 'min:0.01'],
             'iva_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'retention_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'send_email' => ['nullable', 'boolean'],
