@@ -24,6 +24,8 @@ class StorePaymentReceiptRequest extends FormRequest
             'subtotal' => ['required', 'numeric', 'min:0'],
             'iva_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'retention_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'send_email' => ['nullable', 'boolean'],
+            'email_to' => ['nullable', 'email', 'max:255'],
         ];
     }
 }

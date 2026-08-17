@@ -4,10 +4,12 @@ namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\InternetService;
+use App\Models\PaymentReceiptEmailDelivery;
 use App\Models\Plan;
 use App\Models\User;
 use App\Models\Zone;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -48,6 +50,42 @@ class PaymentReceiptTest extends TestCase
         ]);
     }
 
+    public function test_receipt_can_be_created_and_sent_by_email(): void
+    {
+        Mail::fake();
+        $service = $this->service(['billing_amount' => 120]);
+
+        $this->postJson('/api/receipts', [
+            'internet_service_id' => $service->id,
+            'payment_date' => '2026-08-11',
+            'concept' => 'Servicio de Internet',
+            'subtotal' => 120,
+            'send_email' => true,
+        ])->assertCreated()
+            ->assertJsonPath('email_delivery.status', PaymentReceiptEmailDelivery::STATUS_SENT)
+            ->assertJsonPath('data.latest_email_delivery.status', PaymentReceiptEmailDelivery::STATUS_SENT);
+
+        $this->assertDatabaseHas('payment_receipt_email_deliveries', [
+            'recipient_email' => $service->client->email,
+            'status' => PaymentReceiptEmailDelivery::STATUS_SENT,
+        ]);
+    }
+
+    public function test_receipt_email_send_failure_is_recorded_when_client_has_no_email(): void
+    {
+        $service = $this->service(['billing_amount' => 120]);
+        $service->client->update(['email' => null]);
+
+        $this->postJson('/api/receipts', [
+            'internet_service_id' => $service->id,
+            'payment_date' => '2026-08-11',
+            'concept' => 'Servicio de Internet',
+            'subtotal' => 120,
+            'send_email' => true,
+        ])->assertCreated()
+            ->assertJsonPath('email_delivery.status', PaymentReceiptEmailDelivery::STATUS_FAILED);
+    }
+
     public function test_billing_status_marks_paid_service_for_selected_month(): void
     {
         $service = $this->service(['billing_day' => 1, 'cutoff_day' => 5, 'grace_days' => 3, 'billing_amount' => 150]);
@@ -58,6 +96,7 @@ class PaymentReceiptTest extends TestCase
             'client_name' => $service->client->full_name,
             'client_document' => $service->client->document,
             'client_phone' => $service->client->phone,
+            'client_email' => $service->client->email,
             'plan_name' => $service->plan->name,
             'payment_date' => '2026-08-11',
             'concept' => 'Servicio de Internet',

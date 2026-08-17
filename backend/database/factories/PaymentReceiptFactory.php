@@ -26,6 +26,7 @@ class PaymentReceiptFactory extends Factory
             'client_name' => $service->client->full_name,
             'client_document' => $service->client->document,
             'client_phone' => $service->client->phone,
+            'client_email' => $service->client->email,
             'plan_name' => $service->plan->name,
             'payment_date' => fake()->date(),
             'cutoff_date' => fake()->optional()->date(),

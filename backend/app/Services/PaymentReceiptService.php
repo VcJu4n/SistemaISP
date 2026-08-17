@@ -48,6 +48,7 @@ class PaymentReceiptService
                 'client_name' => $service->client->full_name,
                 'client_document' => $service->client->document,
                 'client_phone' => $service->client->phone,
+                'client_email' => $service->client->email,
                 'plan_name' => $service->plan?->name,
                 'payment_date' => $input['payment_date'],
                 'cutoff_date' => $input['cutoff_date'] ?? null,

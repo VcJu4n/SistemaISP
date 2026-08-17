@@ -44,5 +44,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('billing/services', [BillingController::class, 'services']);
     Route::get('billing/status', [BillingController::class, 'status']);
     Route::put('billing/services/{service}', [BillingController::class, 'updateService']);
+    Route::post('receipts/{receipt}/email', [PaymentReceiptController::class, 'sendEmail']);
     Route::apiResource('receipts', PaymentReceiptController::class)->only(['index', 'store', 'show']);
 });

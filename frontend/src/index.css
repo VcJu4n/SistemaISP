@@ -108,6 +108,8 @@ tbody tr:hover { background: #fbfdfc; }
 .status-badge.processing { color: #795400; background: #fff4c7; }
 .status-badge.synced { color: #126146; background: #ddf5e9; }
 .status-badge.failed { color: #a52a21; background: #fee7e5; }
+.status-badge.sent { color: #126146; background: #ddf5e9; }
+.status-badge.unsent { color: #637069; background: #edf2ef; }
 .status-badge.linked { color: #126146; background: #ddf5e9; }
 .status-badge.unlinked { color: #795400; background: #fff4c7; }
 .status-badge.ignored { color: #637069; background: #edf2ef; }
@@ -300,6 +302,9 @@ tbody tr:hover { background: #fbfdfc; }
 .status-pills button.overdue { border-left: 4px solid #b42318; }
 .status-pills button.pending { border-left: 4px solid #84928c; }
 .receipt-history-search { width: min(100%, 360px); }
+.email-status { display: grid; gap: 4px; }
+.email-status small { max-width: 180px; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.email-last-delivery { margin-top: 10px; padding: 12px; background: #f8fbfa; border: 1px solid var(--line); border-radius: 10px; }
 td small { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
 
 @media (max-width: 780px) {

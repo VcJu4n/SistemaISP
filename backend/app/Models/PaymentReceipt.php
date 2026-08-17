@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class PaymentReceipt extends Model
 {
@@ -19,6 +21,7 @@ class PaymentReceipt extends Model
         'client_name',
         'client_document',
         'client_phone',
+        'client_email',
         'plan_name',
         'payment_date',
         'cutoff_date',
@@ -62,5 +65,15 @@ class PaymentReceipt extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function emailDeliveries(): HasMany
+    {
+        return $this->hasMany(PaymentReceiptEmailDelivery::class);
+    }
+
+    public function latestEmailDelivery(): HasOne
+    {
+        return $this->hasOne(PaymentReceiptEmailDelivery::class)->latestOfMany();
     }
 }

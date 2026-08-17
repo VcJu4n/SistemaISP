@@ -1,9 +1,9 @@
-import { Eye, FileText, Printer, ReceiptText, Save, Search, Settings, X } from 'lucide-react'
+import { Eye, FileText, Mail, Printer, ReceiptText, Save, Search, Send, Settings, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { api, getApiError } from '../lib/api'
 
 type Zone = { id: number; name: string }
-type Client = { id: number; full_name: string; document: string; phone: string; zone: Zone }
+type Client = { id: number; full_name: string; document: string; phone: string; email: string | null; zone: Zone }
 type Plan = { id: number; name: string; monthly_price: string | null; download_mbps: number; upload_mbps: number }
 type Service = {
   id: number
@@ -23,6 +23,7 @@ type Receipt = {
   client_name: string
   client_document: string | null
   client_phone: string | null
+  client_email: string | null
   plan_name: string | null
   payment_date: string
   cutoff_date: string | null
@@ -38,7 +39,9 @@ type Receipt = {
   total_received: string
   amount_words: string
   created_at: string
+  latest_email_delivery?: EmailDelivery | null
 }
+type EmailDelivery = { id: number; recipient_email: string; status: 'pending' | 'sent' | 'failed'; error_message: string | null; sent_at: string | null; created_at: string }
 type Meta = { current_page: number; last_page: number; total: number }
 type BillingStatus = {
   service_id: number
@@ -73,6 +76,8 @@ type ReceiptForm = {
   concept: string
   observations: string
   subtotal: string
+  send_email: boolean
+  email_to: string
 }
 
 const emptyMeta: Meta = { current_page: 1, last_page: 1, total: 0 }
@@ -92,9 +97,10 @@ export function ReceiptsPage() {
   const [year, setYear] = useState(String(now.getFullYear()))
   const [month, setMonth] = useState(String(now.getMonth() + 1))
   const [page, setPage] = useState(1)
-  const [form, setForm] = useState<ReceiptForm>({ internet_service_id: '', payment_date: todayIso(), cutoff_date: '', billing_period: '', concept: 'Servicio de Internet', observations: '', subtotal: '0' })
+  const [form, setForm] = useState<ReceiptForm>({ internet_service_id: '', payment_date: todayIso(), cutoff_date: '', billing_period: '', concept: 'Servicio de Internet', observations: '', subtotal: '0', send_email: false, email_to: '' })
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null)
   const [billingModal, setBillingModal] = useState<Service | null>(null)
+  const [emailModal, setEmailModal] = useState<Receipt | null>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -157,6 +163,8 @@ export function ReceiptsPage() {
       concept: 'Servicio de Internet',
       observations: service.plan.name,
       subtotal: String(serviceAmount(service)),
+      send_email: Boolean(service.client.email),
+      email_to: service.client.email ?? '',
     }))
   }
 
@@ -191,9 +199,12 @@ export function ReceiptsPage() {
         subtotal: Number(form.subtotal || 0),
         iva_rate: 0,
         retention_rate: 0,
+        send_email: form.send_email,
+        email_to: form.email_to || null,
       })
       setSelectedReceipt(response.data.data)
-      setMessage(`Recibo Nro. ${response.data.data.receipt_number} registrado correctamente.`)
+      const delivery = response.data.data.latest_email_delivery
+      setMessage(delivery ? receiptEmailMessage(response.data.data, delivery) : `Recibo Nro. ${response.data.data.receipt_number} registrado correctamente.`)
       await load()
       printReceipt(response.data.data)
     } catch (requestError) {
@@ -227,6 +238,8 @@ export function ReceiptsPage() {
               <label className="field full"><span>Periodo</span><input value={form.billing_period} onChange={(event) => updateReceiptForm({ billing_period: event.target.value })} placeholder="Agosto 2026" /></label>
               <label className="field"><span>Concepto *</span><input required maxLength={255} value={form.concept} onChange={(event) => updateReceiptForm({ concept: event.target.value })} /></label>
               <label className="field"><span>Monto Bs *</span><input required type="number" min="0" step="0.01" value={form.subtotal} onChange={(event) => updateReceiptForm({ subtotal: event.target.value })} /></label>
+              <label className="toggle-field full"><input type="checkbox" checked={form.send_email} onChange={(event) => updateReceiptForm({ send_email: event.target.checked })} /><span>Enviar recibo por correo al guardar</span></label>
+              {form.send_email && <label className="field full"><span>Correo destino *</span><input required type="email" value={form.email_to} onChange={(event) => updateReceiptForm({ email_to: event.target.value })} placeholder="cliente@correo.com" /></label>}
               <label className="field full"><span>Observaciones</span><textarea maxLength={1000} value={form.observations} onChange={(event) => updateReceiptForm({ observations: event.target.value })} /></label>
             </div>
             <footer className="form-actions"><button className="button button-primary button-fit" disabled={saving || !selectedService || !selectedService.billing_enabled}><Save size={16} /> {saving ? 'Guardando...' : 'Guardar e imprimir'}</button></footer>
@@ -271,8 +284,8 @@ export function ReceiptsPage() {
           {loading ? <div className="table-message">Cargando recibos...</div> : receipts.length === 0 ? <div className="table-message"><FileText /><strong>Sin recibos en este periodo</strong></div> : (
             <div className="table-scroll">
               <table>
-                <thead><tr><th>Nro.</th><th>Fecha</th><th>Cliente</th><th>Concepto</th><th>Total</th><th aria-label="Acciones" /></tr></thead>
-                <tbody>{receipts.map((receipt) => <tr key={receipt.id}><td>{receipt.receipt_number}</td><td>{formatDate(receipt.payment_date)}</td><td>{receipt.client_name}</td><td>{receipt.concept}</td><td>{moneyFormatter.format(Number(receipt.total_received))} Bs</td><td><div className="row-actions"><button title="Ver recibo" onClick={() => setSelectedReceipt(receipt)}><Eye size={17} /></button><button title="Imprimir" onClick={() => printReceipt(receipt)}><Printer size={17} /></button></div></td></tr>)}</tbody>
+                <thead><tr><th>Nro.</th><th>Fecha</th><th>Cliente</th><th>Concepto</th><th>Total</th><th>Correo</th><th aria-label="Acciones" /></tr></thead>
+                <tbody>{receipts.map((receipt) => <tr key={receipt.id}><td>{receipt.receipt_number}</td><td>{formatDate(receipt.payment_date)}</td><td>{receipt.client_name}</td><td>{receipt.concept}</td><td>{moneyFormatter.format(Number(receipt.total_received))} Bs</td><td><EmailDeliveryBadge delivery={receipt.latest_email_delivery} /></td><td><div className="row-actions"><button title="Ver recibo" onClick={() => setSelectedReceipt(receipt)}><Eye size={17} /></button><button title="Imprimir" onClick={() => printReceipt(receipt)}><Printer size={17} /></button><button title="Enviar por correo" onClick={() => setEmailModal(receipt)}><Mail size={17} /></button></div></td></tr>)}</tbody>
               </table>
             </div>
           )}
@@ -281,8 +294,38 @@ export function ReceiptsPage() {
       </section>
 
       {billingModal && <BillingConfigModal service={billingModal} onClose={() => setBillingModal(null)} onSaved={async () => { setBillingModal(null); await load() }} />}
+      {emailModal && <EmailReceiptModal receipt={emailModal} onClose={() => setEmailModal(null)} onSent={async (updated, delivery) => { setEmailModal(null); setSelectedReceipt(updated); setMessage(receiptEmailMessage(updated, delivery)); await load() }} />}
     </section>
   )
+}
+
+function EmailDeliveryBadge({ delivery }: { delivery?: EmailDelivery | null }) {
+  if (!delivery) return <span className="status-badge unsent">Sin envio</span>
+  if (delivery.status === 'sent') return <div className="email-status"><span className="status-badge sent">Enviado</span><small>{delivery.recipient_email}</small></div>
+  if (delivery.status === 'failed') return <div className="email-status"><span className="status-badge failed">Fallido</span><small>{delivery.error_message ?? delivery.recipient_email}</small></div>
+  return <span className="status-badge pending">Pendiente</span>
+}
+
+function EmailReceiptModal({ receipt, onClose, onSent }: { receipt: Receipt; onClose: () => void; onSent: (receipt: Receipt, delivery: EmailDelivery) => Promise<void> }) {
+  const [email, setEmail] = useState(receipt.client_email || receipt.latest_email_delivery?.recipient_email || '')
+  const [error, setError] = useState('')
+  const [sending, setSending] = useState(false)
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setSending(true)
+    setError('')
+    try {
+      const response = await api.post<{ data: Receipt; email_delivery: EmailDelivery }>(`/receipts/${receipt.id}/email`, { email_to: email || null })
+      await onSent(response.data.data, response.data.email_delivery)
+    } catch (requestError) {
+      setError(getApiError(requestError))
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return <div className="modal-backdrop"><section className="modal-card"><header><div><span className="eyebrow">Correo</span><h2>Enviar recibo Nro. {receipt.receipt_number}</h2></div><button className="modal-close" onClick={onClose}><X /></button></header>{error && <div className="alert alert-error">{error}</div>}<form onSubmit={submit}><label className="field"><span>Correo destino *</span><input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="cliente@correo.com" /></label>{receipt.latest_email_delivery && <div className="email-last-delivery"><EmailDeliveryBadge delivery={receipt.latest_email_delivery} /></div>}<footer className="form-actions"><button type="button" className="button button-secondary" onClick={onClose}>Cancelar</button><button className="button button-primary button-fit" disabled={sending}><Send size={16} /> {sending ? 'Enviando...' : 'Enviar correo'}</button></footer></form></section></div>
 }
 
 function ReceiptPreview({ receipt, preview }: { receipt: Receipt | null; preview: Receipt }) {
@@ -343,6 +386,7 @@ function receiptPreview(form: ReceiptForm, service: Service | null): Receipt {
     client_name: service?.client.full_name ?? '',
     client_document: service?.client.document ?? null,
     client_phone: service?.client.phone ?? null,
+    client_email: service?.client.email ?? null,
     plan_name: service?.plan.name ?? null,
     payment_date: form.payment_date,
     cutoff_date: form.cutoff_date || null,
@@ -358,7 +402,13 @@ function receiptPreview(form: ReceiptForm, service: Service | null): Receipt {
     total_received: amount.toFixed(2),
     amount_words: '',
     created_at: '',
+    latest_email_delivery: null,
   }
+}
+
+function receiptEmailMessage(receipt: Receipt, delivery: EmailDelivery) {
+  if (delivery.status === 'sent') return `Recibo Nro. ${receipt.receipt_number} enviado a ${delivery.recipient_email}.`
+  return `Recibo Nro. ${receipt.receipt_number} guardado, pero no se pudo enviar el correo.`
 }
 
 function printReceipt(receipt: Receipt) {
